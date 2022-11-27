@@ -2,10 +2,10 @@
 
 for id in 0 1 2 3
 do
-    python3 yolov5/detect.py \
-        --weights yolov5/yolov5s.pt \
-        --project runs/detect/simple \
+    python3 yolov7/detect.py \
+        --weights yolov7/yolov7.pt \
+        --project runs/detect/$1 \
         --name cam$id \
-        --source data/simple/cam$id \
-        --img 640 --conf 0.25 --save-txt --save-crop 
+        --source data/$1/cam$id \
+        --img 640 --conf 0.25 --save-txt --no-trace
 done
