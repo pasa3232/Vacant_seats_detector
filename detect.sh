@@ -7,5 +7,5 @@ do
         --project runs/detect/simple \
         --name cam$id \
         --source data/simple/cam$id \
-        --img 640 --conf 0.25
+        --img 640 --conf 0.25 --save-txt --save-crop 
 done
