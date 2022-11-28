@@ -108,6 +108,43 @@ def rectify(igs, p1, p2):
 
     return igs_rec
 
+def bilinear_interpolate(input_img, point):
+    maxy, maxx = input_img.shape[0], input_img.shape[1]
+    tl_x, tl_y = int(np.floor(point[0])), int(np.floor(point[1])) # top left coordinates
+    a, b = (point[0] - tl_x), (point[1] - tl_y)
+    tr_x, tr_y = tl_x+1, tl_y
+    bl_x, bl_y = tl_x, tl_y+1
+    br_x, br_y = tl_x+1, tl_y+1
+
+    # in order of TL, TR, BL, BR
+    coordinates = np.array([[tl_x, tl_y], [tr_x, tr_y], [bl_x, bl_y], [br_x, br_y]])
+    scales = np.array([(1-a)*(1-b), a*(1-b), (1-a)*b, a*b])
+    
+    value = 0
+    for i, coord in enumerate(coordinates):
+        x, y = coord[0], coord[1]
+        if (0 <= x < maxx) and (0 <= y < maxy):
+            value += input_img[y, x]*scales[i]
+
+    return value
+
+def warp_image(igs_in, igs_ref, H):
+    # TODO ...
+    maxy, maxx = igs_ref.shape[0], igs_ref.shape[1]
+    iny, inx = igs_in.shape[0], igs_in.shape[1]
+    igs_warp = np.zeros_like(igs_ref)
+
+    invH = np.linalg.inv(H)
+    for y in range(maxy):
+        for x in range(maxx):
+            point1 = np.array([x, y, 1])
+            point2 = invH@point1
+            point2 /= point2[2]
+            value = bilinear_interpolate(igs_in, point2)
+            igs_warp[y, x] = value
+
+    return igs_warp
+
 def set_cor_rec():
     """
     Output: 
