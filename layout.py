@@ -3,6 +3,9 @@ import sys
 import numpy as np
 import cv2
 
+from utils.homography import compute_h, cor_p
+from utils.triangulation import triangulation
+from pathlib import Path
 
 ### fetch camera poses
 num_cams = 4
@@ -34,12 +37,13 @@ for i in range(num_cams):
 
             # check object class
             if data[0] == 56 or data[0] == 11: # chair or bench
-                yolo_output['chair'].append(np.array(data[1:3]))
+                yolo_output['chair'].append(np.array(data[1:5]))
             elif data[0] == 60: # table
-                yolo_output['table'].append(np.array(data[1:3]))
+                yolo_output['table'].append(np.array(data[1:5]))
             elif data[0] == 0: # person
-                yolo_output['person'].append(np.array(data[1:3]))
+                yolo_output['person'].append(np.array(data[1:5]))
         yolo_outputs[f'cam{i}'] = yolo_output
+
 
 
 # ### check yolo output
@@ -53,31 +57,36 @@ for i in range(num_cams):
 # cv2.circle(img, (int(w*x_), int(h*y_)), 5, (0, 0, 255), -1)
 # cv2.imwrite('person.png', img)
 
-
-### triangulation for the person
-K = np.array([
-    [1769.60561310104, 0, 1867.08704019384],
-    [0, 1763.89532833387, 1024.40054933721],
-    [0, 0, 1]
-])
 h, w = 2080, 3720
-constraint_mat = []
-for i in range(num_cams):
-    calib = K @ cam_poses[f'cam{i}'][:3, :]
-    p1_t = calib[0, :]
-    p2_t = calib[1, :]
-    p3_t = calib[2, :]
 
-    x_, y_ = sorted(yolo_outputs[f'cam{i}']['person'], key=lambda x: x[0])[-1] # most right person is Taeksoo for all images
-    x, y = w * x_, h * y_
+poses = [cam_poses[f'cam{i}'][:3, :] for i in range(num_cams)]
+X = [sorted(yolo_outputs[f'cam{i}']['person'], key=lambda x: x[0])[-1][0] * w for i in range(num_cams)]
+Y = [sorted(yolo_outputs[f'cam{i}']['person'], key=lambda x: x[0])[-1][1] * h for i in range(num_cams)]
+print(f"person 3d point: {triangulation(poses, X, Y)}")
 
-    constraint_mat.append([y * p3_t - p2_t])
-    constraint_mat.append([x * p2_t - y * p1_t])
-constraint_mat = np.array(constraint_mat).reshape(1, 8, 4).squeeze()
+H = []
+for id in range(num_cams - 1):
+    img = cv2.imread(f'./runs/detect/layout/cam{id+1}/0001.jpg')
+    c_in = cor_p[id]
+    c_ref = cor_p[id + 1]
+    H.append(compute_h(c_ref, c_in))
 
-# svd for solution
-_, sigma , V = np.linalg.svd(constraint_mat)
-vh = V[-1, :]
-person = vh[:-1] / vh[-1]
+    bboxes = []
+    for i, table in enumerate(yolo_outputs[f'cam{id}']['table']):
+        y_, x_, w_, h_ = table
+        vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        vertices = [[x_ + p[0] * h_ / 2, y_ + p[1] * w_ / 2] for p in vertices]
 
-print(person)
+        bbox = []
+        for v in vertices:
+            x, y, z = H[id] @ np.array([v[0], v[1], 1]).reshape(3, 1)
+            x = x / z * h
+            y = y / z * w
+            bbox.append([int(y), int(x)])
+        bbox = np.array(bbox)
+        img = cv2.polylines(img, [bbox], True, (0, 0, 255), 6)
+
+    save_dir = Path('./runs/homography/simple')
+    save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+
+    cv2.imwrite(f"./runs/homography/layout/cam{id}_to_cam{id+1}.jpg", img)
