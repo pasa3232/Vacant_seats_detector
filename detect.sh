@@ -7,5 +7,6 @@ do
         --project runs/detect/$1 \
         --name cam$id \
         --source data/$1/cam$id \
+        --iou-thres 0.3 \
         --img 640 --conf 0.25 --save-txt --no-trace
 done
