@@ -88,7 +88,7 @@ for id in range(num_cams - 1):
         bbox = []
 
         for v in vertices:
-            original_point = [int(v[1] * h), int(v[0] * w)] 
+            original_point = [int(v[1] * w), int(v[0] * h)] 
             original_bbox.append(original_point)
 
             x, y, z = H[id] @ np.array([v[0], v[1], 1]).reshape(3, 1)
