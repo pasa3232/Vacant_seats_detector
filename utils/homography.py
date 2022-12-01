@@ -23,7 +23,7 @@ def compute_h(p1, p2):
 
     A = np.array(A)
     b = np.array(b)
-    t, _, _, _ = np.linalg.lstsq(A,b)
+    t, _, _, _ = np.linalg.lstsq(A,b, rcond=None)
     H = t[:,0].reshape(3, 3)
 
     return H
