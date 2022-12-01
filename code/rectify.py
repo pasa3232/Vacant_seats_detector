@@ -39,6 +39,7 @@ def normalization_matrix(p):
     
     return T
 
+# outputs H that maps p2 to p1
 def compute_h_norm(p1, p2):
     # TODO ...
     # find shift and scale for normalization matrix T
@@ -128,12 +129,14 @@ def bilinear_interpolate(input_img, point):
 
     return value
 
+# H: mapping from input to output
 def warp_image(igs_in, igs_ref, H):
     # TODO ...
     maxy, maxx = igs_ref.shape[0], igs_ref.shape[1]
     iny, inx = igs_in.shape[0], igs_in.shape[1]
     igs_warp = np.zeros_like(igs_ref)
 
+    # invH: mapping from output to input
     invH = np.linalg.inv(H)
     for y in range(maxy):
         for x in range(maxx):

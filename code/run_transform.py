@@ -36,7 +36,7 @@ def set_cor_pts():
     
     return points
 
-
+# H: mapping from input to output
 def homography():
     points = set_cor_pts()
     H = []
@@ -57,6 +57,7 @@ def test(images):
     output = np.array(output)
     
     H = homography()
+    # invH: mapping from output to input
     invH = [np.linalg.inv(H[i]) for i in range(len(H))]
     print(f'invH length and shape:\n{len(invH), invH[0].shape}')
 
@@ -65,42 +66,40 @@ def test(images):
 
     out_images = []
 
-    # for i in range(3):
-    #     start_out = invH[i] @ img_start
-    #     warped_start_x, warped_start_y = start_out[0] / start_out[2], start_out[1] / start_out[2]
-    #     end_out = invH[i] @ img_end
-    #     warped_end_x, warped_end_y = end_out[0] / end_out[2], end_out[1] / end_out[2]
-    #     warped_x_grid = np.linspace(warped_start_x, warped_end_x, maxx)
-    #     warped_y_grid = np.linspace(warped_start_y, warped_end_y, maxy)
-    #     warped_x_mesh, warped_y_mesh = np.meshgrid(warped_x_grid, warped_y_grid)
-    #     out_x = np.linspace(0, maxx-1, maxx)
-    #     out_y = np.linspace(0, maxy-1, maxy)
-    #     spline = RectBivariateSpline(out_y, out_x, images[i+1])
-    #     warped_img = spline.ev(warped_y_mesh, warped_x_mesh)
-    #     out_images.append(warped_img)
-    #     end = time.time()
-    #     print(f'time for image {i}: {end-start} seconds')
-    #     start = end
-    # print(f'time for image {2}: {end-start} seconds')
-
     for i in range(3):
-        warped_img = rectify.warp_image(images[i], images[i+1], H[i])
+        start_out = invH[i] @ img_start
+        warped_start_x, warped_start_y = start_out[0] / start_out[2], start_out[1] / start_out[2]
+        end_out = invH[i] @ img_end
+        warped_end_x, warped_end_y = end_out[0] / end_out[2], end_out[1] / end_out[2]
+        warped_x_grid = np.linspace(warped_start_x, warped_end_x, maxx)
+        warped_y_grid = np.linspace(warped_start_y, warped_end_y, maxy)
+        warped_x_mesh, warped_y_mesh = np.meshgrid(warped_x_grid, warped_y_grid)
+        out_x = np.linspace(0, maxx-1, maxx)
+        out_y = np.linspace(0, maxy-1, maxy)
+        spline = RectBivariateSpline(out_x, out_y, images[i+1].T)
+        warped_img = spline.ev(warped_x_mesh, warped_y_mesh)
         out_images.append(warped_img)
         end = time.time()
         print(f'time for image {i}: {end-start} seconds')
         start = end
-    print(f'time for image {2}: {end-start} seconds')
+
+    # for i in range(3):
+    #     warped_img = rectify.warp_image(images[i], images[i+1], H[i])
+    #     out_images.append(warped_img)
+    #     end = time.time()
+    #     print(f'time for image {i}: {end-start} seconds')
+    #     start = end
 
     return np.array(out_images)
 
 
-def transform(bbox1, bbox2):
+def transform(bbox1, bbox2, H):
     """
     Input: 
         The inputs to this function are lists of bounding box data for two images taken at the same time from adjacent cameras.
         points on cam0 and cam1 images, on cam1 and cam2 images, on cam2 and cam3 images
     Output: 
-        The output is a list of pairs input points and their transformations
+        The output is a list of pairs of input points and their transformed coordinates
     Algorithm: 
         We find 6 pairs of correspondence points by hand in order to compute the transformation matrix W.
         Then for each center point in bboxes1, we find its predicted correspondence point through W.
@@ -108,8 +107,19 @@ def transform(bbox1, bbox2):
     Assumptions:
         We assume that the inputted bounding box data are those of pictures in the 'layout' directory.
     """
+    output = []
+    for i in range(len(bbox1)):
+        coord = H @ bbox1[i]
+        output.append({f'{bbox1[i]}': coord})
+    
+    # do some kind of comparison between outputs and bbox2
+    return output
+
 
 def visualize():
+    """
+    Visualize the outputs of 
+    """
     ...
 
 if __name__ == '__main__':
