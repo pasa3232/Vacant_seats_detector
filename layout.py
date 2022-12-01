@@ -105,8 +105,8 @@ for id in range(num_cams - 1):
         img = cv2.polylines(img, [bbox], True, (0, 0, 255), 6)
         box_name = f'Box{i}'
 
-        cv2.circle(original_img, (center[0], center[1]), 3, (0, 0, 255), 6, cv2.LINE_8, 0)
-        cv2.circle(img, (transformed_center[0], transformed_center[1]), 3, (0, 0, 255), 6, cv2.LINE_8, 0)
+        # cv2.circle(original_img, (center[0], center[1]), 3, (0, 0, 255), 6, cv2.LINE_8, 0)
+        # cv2.circle(img, (transformed_center[0], transformed_center[1]), 3, (0, 0, 255), 6, cv2.LINE_8, 0)
         cv2.putText(original_img, box_name, (original_bbox[0][0], original_bbox[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 3)
         cv2.putText(img, box_name, (bbox[0][0], bbox[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 3)
 
