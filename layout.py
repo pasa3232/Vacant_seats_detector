@@ -6,6 +6,7 @@ import cv2
 from utils.homography import compute_h, cor_p
 from utils.triangulation import triangulation
 from pathlib import Path
+from shapely.geometry import Polygon
 
 ### fetch camera poses
 num_cams = 4
@@ -117,3 +118,147 @@ for id in range(num_cams - 1):
 
     cv2.imwrite(f"./runs/homography/layout/cam{id}_to_cam{id+1}_cam{id}.jpg", original_img)
     cv2.imwrite(f"./runs/homography/layout/cam{id}_to_cam{id+1}.jpg", img)
+
+
+
+# Computes homography matrix between each pair of neighbouring camers
+# H[i]: cam(i) -> H[i] -> cam(i+1)
+def readH():
+    H_ = []
+    for id in range(num_cams - 1):
+        c_in = cor_p[id]
+        c_ref = cor_p[id + 1]
+        H_.append(compute_h(c_ref, c_in))
+    return H_
+
+
+# Creates array of bounding box information given yolo-outputs of cam{id}
+# Input: id
+# Output: an array of [center, bbox] corresponding to a table
+#   bboxes  : an array of [center, bbox] corresponding to a table
+#   center  : [horizontal, vertical] pixel values
+#   bbox    : [[horizontal, vertical] of the 4 corners of the bounding box]
+def yoloToBoxes(id):
+    bboxes = []
+    for i, table in enumerate(yolo_outputs[f'cam{id}']['table']):
+        y_, x_, w_, h_ = table
+        vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        vertices = [[x_ + p[0] * h_ / 2, y_ + p[1] * w_ / 2] for p in vertices] # (vertical, horizontal)
+        center = np.array([int(y_ * w), int(x_ * h)])   # (horizontal, vertical)
+
+        bbox = []
+        for v in vertices:
+            point = [int(v[1] * w), int(v[0] * h)] 
+            bbox.append(point)
+        bbox = np.array(bbox)
+        bboxes.append([center, bbox])
+    return bboxes
+
+
+# Transforms the bounding boxes of image from cam{i} with a homography H
+# Typically, H is the homography from cam{i} to cam{i+1}
+# Input: id, H
+# Output: transformed_bboxes
+#   transformed_bboxes  : an array of [transformed_center, transformed_bbox] corresponding to a table in cam{i}
+#   transformed_center  : [horizontal, vertical] pixel values
+#   transformed_bbox    : [[horizontal, vertical] of the 4 corners of the bounding box transformed with H]
+def yoloToBoxesTransformed(id, H):
+    transformed_bboxes = []
+    for i, table in enumerate(yolo_outputs[f'cam{id}']['table']):
+        y_, x_, w_, h_ = table
+        vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        vertices = [[x_ + p[0] * h_ / 2, y_ + p[1] * w_ / 2] for p in vertices] # (vertical, horizontal)
+        center = np.array([int(y_ * w), int(x_ * h)])   # (horizontal, vertical)
+        newy, newx, newz = H @ np.array([x_, y_, 1]).reshape(3, 1)
+        transformed_center = np.array([np.squeeze(int(newx / newz * w)), np.squeeze(int(newy / newz * h))])
+
+        transformed_bbox = []
+        for v in vertices:
+            x, y, z = H @ np.array([v[0], v[1], 1]).reshape(3, 1)
+            x = x / z * h
+            y = y / z * w
+            transformed_bbox.append([int(y), int(x)]) # Transformed bounding box
+        transformed_bbox = np.array(transformed_bbox)
+        transformed_bboxes.append([transformed_center, transformed_bbox])
+
+    return transformed_bboxes
+
+'''
+Here we introduce the notion of "before" and "after" images for convenience and generaltity
+A homography H maps an image from "before" to "after" (i.e. before --> H --> after)
+In most, if not all, of the usages, before will be cam{i}, after will be cam{i+1} for some index i
+'''
+
+# Finds matches between the two given bounding boxes
+# Input: after_bboxes, before_bboxes_transformed
+#   after_bboxes    : array of bounding box information of "after" image
+#   before_bboxes   : array of bounding box information of "before" image transformed with homography to "after"
+# Output: selected
+#   selected        : an array of indices [i, j]
+#   i               : the index of the matched object in "after_bboxes"
+#   j               : the index of the matched object in "before_bboxes_transformed"
+def matchByOverlap(after_bboxes, before_bboxes_transformed):
+    overlaps = []
+    for i, after_bbox in enumerate(after_bboxes):
+        after_bbox_polygon = Polygon(after_bbox[1])
+        for j, before_bbox_transformed in enumerate(before_bboxes_transformed):
+            before_bbox_transformed_polygon = Polygon(before_bbox_transformed[1])
+            if(after_bbox_polygon.intersects(before_bbox_transformed_polygon)):
+                overlap = after_bbox_polygon.intersection(before_bbox_transformed_polygon).area
+                total = after_bbox_polygon.area + before_bbox_transformed_polygon.area - overlap
+                percentage = overlap/total
+                # percentage = overlap/after_bbox_polygon.area
+                overlaps.append([i, j, percentage])
+    overlaps.sort(key = lambda x : x[-1], reverse=True)
+    
+    after_indices = set(range(len(after_bboxes)))
+    before_indices = set(range(len(before_bboxes_transformed)))
+
+    selected = []
+    for i, j, _ in overlaps:
+        if i in after_indices and j in before_indices:
+            # i : index in bboxes (cam(i+1))
+            # j : index in transformed_bboxes (cam(i) -> cam(i+1))
+            selected.append([i, j])
+            after_indices.remove(i)
+            before_indices.remove(j)
+
+    return selected
+
+
+# Plots the found matches between two images "before" and "after"
+# Input: before_idx, after_idx, before_bboxes, after_bboxes, matched
+#   before_idx      : index of the "before" image
+#   after_idx       : index of the "after" image
+#   before_bboxes   : bounding box information of the "before" image
+#   after_bboxes    : bounding box information of the "after" image
+#   matched         : the indices i,j of the matches between the bounding boxes of tables in "before" and "after" image
+def plotMatch(before_idx, after_idx, before_bboxes, after_bboxes, matched):
+    before_img = cv2.imread(f'./runs/detect/layout/cam{before_idx}/0001.jpg')
+    after_img = cv2.imread(f'./runs/detect/layout/cam{after_idx}/0001.jpg')
+    for i, (after, before) in enumerate(matched):
+        before_bbox = before_bboxes[before]
+        after_bbox = after_bboxes[after]
+        cv2.putText(before_img, f'match{i}', (before_bbox[0][0], before_bbox[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+        cv2.putText(after_img, f'match{i}', (after_bbox[0][0], after_bbox[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+
+    save_dir = Path('./runs/match/layout')
+    save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+
+    cv2.imwrite(f"./runs/match/layout/matched_{before_idx}_{before_idx}_to_{after_idx}.jpg", before_img)
+    cv2.imwrite(f"./runs/match/layout/matched_{after_idx}_{before_idx}_to_{after_idx}.jpg", after_img)
+
+
+H_ = readH()
+bboxes_all = [yoloToBoxes(id) for id in range(num_cams)]
+transformed_bboxes_all = [yoloToBoxesTransformed(id, H[id]) for id in range(num_cams-1)]
+
+for idx in range(num_cams-1):
+    before = idx
+    after = idx + 1
+
+    before_bboxes = bboxes_all[before]
+    before_bboxes_transformed = transformed_bboxes_all[after-1]
+    after_bboxes = bboxes_all[after]
+    matched = matchByOverlap(after_bboxes, before_bboxes_transformed)
+    plotMatch(before, after, before_bboxes, after_bboxes, matched)
