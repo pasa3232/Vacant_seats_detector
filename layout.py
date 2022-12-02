@@ -263,14 +263,6 @@ def matchByOverlap(after_bboxes, before_bboxes_transformed):
     return selected
 
 
-# Plots the found matches between two images "before" and "after"
-# Input: before_idx, after_idx, before_bboxes, after_bboxes, matched
-#   before_idx      : index of the "before" image
-#   after_idx       : index of the "after" image
-#   before_bboxes   : bounding box information of the "before" image
-#   after_bboxes    : bounding box information of the "after" image
-#   matched         : the indices i,j of the matches between the bounding boxes of tables in "before" and "after" image
-
 # reference: https://stackoverflow.com/questions/45322630/how-to-detect-lines-in-opencv
 def find_lines(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -286,7 +278,7 @@ def find_lines(img):
     rho = 1  
     theta = np.pi / 180  
     threshold = 30  # minimum number of votes (intersections in Hough grid cell)
-    min_line_length = 50  # minimum number of pixels making up a line
+    min_line_length = 125  # minimum number of pixels making up a line
     max_line_gap = 20  # maximum gap in pixels between connectable line segments
     line_image = np.copy(img) * 0  # creating a blank to draw lines on
 
@@ -302,7 +294,14 @@ def find_lines(img):
     line_image = np.asarray(line_image, np.float64)
     cv2.imshow("pic with lines", line_image)
     cv2.waitKey(0)
-# 
+
+# Plots the found matches between two images "before" and "after"
+# Input: before_idx, after_idx, before_bboxes, after_bboxes, matched
+#   before_idx      : index of the "before" image
+#   after_idx       : index of the "after" image
+#   before_bboxes   : bounding box information of the "before" image
+#   after_bboxes    : bounding box information of the "after" image
+#   matched         : the indices i,j of the matches between the bounding boxes of tables in "before" and "after" image
 
 def plotMatch(before_idx, after_idx, before_bboxes, after_bboxes, matched):
     before_img = cv2.imread(f'./runs/detect/layout/cam{before_idx}/0001.jpg')
