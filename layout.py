@@ -25,6 +25,7 @@ for i in range(num_cams):
 ### fetch yolo outputs
 # output of all cameras
 yolo_outputs = {} # key: cami, value: yolo_output
+
 for i in range(num_cams):
 
     # outputs of one camera:
@@ -154,6 +155,42 @@ def yoloToBoxes(id):
         bboxes.append([center, bbox])
     return bboxes
 
+# id is camera id
+def detectChairs(id):
+    """
+    Output: 
+        list of all pairs between table centers and distances to chairs.
+        If the number of tables is M and the number of chairs is N, 
+        then this function outputs an MxN list.
+    Input: 
+        id of camera that specifies the (id)th pictures
+    Assumptions:
+        We assume that all contents in the list follow the order of the tables and chairs in 
+        yolo_outputs[f'cam{id}']
+    """
+    chairList = []
+    for _, table in enumerate(yolo_outputs[f'cam{id}']['table']):
+        y_, x_, w_, h_ = table
+        vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        vertices = [[x_ + p[0] * h_ / 2, y_ + p[1] * w_ / 2] for p in vertices] # (vertical, horizontal)
+        table_center = np.array([int(y_ * w), int(x_ * h)])   # (horizontal, vertical)
+        radius = np.linalg.norm(np.array(vertices[0]) - table_center)
+        print(f'radius:\n{radius}')
+        
+        one_table_distances = []
+        for _, chair in enumerate(yolo_outputs[f'cam{id}']['chair']):
+            y2, x2, w2, h2 = chair
+            vertices2 = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+            vertices2 = [[x2 + p[0] * h2 / 2, y2 + p[1] * w2 / 2] for p in vertices2] # (vertical, horizontal)
+            chair_center = np.array([int(y2 * w), int(x2 * h)])   # (horizontal, vertical)
+            # print(f'table_center:\n{table_center}\nchair_center:\n{chair_center}')
+            distance = np.linalg.norm(table_center - chair_center)
+            one_table_distances.append(distance)
+        
+        one_table_distances = np.array(one_table_distances)
+        chairList.append(np.array([table_center, one_table_distances]))
+    return chairList
+
 
 # Transforms the bounding boxes of image from cam{i} with a homography H
 # Typically, H is the homography from cam{i} to cam{i+1}
@@ -233,6 +270,40 @@ def matchByOverlap(after_bboxes, before_bboxes_transformed):
 #   before_bboxes   : bounding box information of the "before" image
 #   after_bboxes    : bounding box information of the "after" image
 #   matched         : the indices i,j of the matches between the bounding boxes of tables in "before" and "after" image
+
+# reference: https://stackoverflow.com/questions/45322630/how-to-detect-lines-in-opencv
+def find_lines(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    kernel_size = 5
+    blur_gray = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
+
+    low_threshold = 50
+    high_threshold = 150
+
+    edges = cv2.Canny(blur_gray, low_threshold, high_threshold)
+
+    rho = 1  
+    theta = np.pi / 180  
+    threshold = 30  # minimum number of votes (intersections in Hough grid cell)
+    min_line_length = 50  # minimum number of pixels making up a line
+    max_line_gap = 20  # maximum gap in pixels between connectable line segments
+    line_image = np.copy(img) * 0  # creating a blank to draw lines on
+
+    # Run Hough on edge detected image
+    # Output "lines" is an array containing endpoints of detected line segments
+    lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
+                        min_line_length, max_line_gap)
+
+    for line in lines:
+        for x1,y1,x2,y2 in line:
+            cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),5)
+
+    line_image = np.asarray(line_image, np.float64)
+    cv2.imshow("pic with lines", line_image)
+    cv2.waitKey(0)
+# 
+
 def plotMatch(before_idx, after_idx, before_bboxes, after_bboxes, matched):
     before_img = cv2.imread(f'./runs/detect/layout/cam{before_idx}/0001.jpg')
     after_img = cv2.imread(f'./runs/detect/layout/cam{after_idx}/0001.jpg')
@@ -243,7 +314,8 @@ def plotMatch(before_idx, after_idx, before_bboxes, after_bboxes, matched):
         cv2.putText(after_img, f'match{i}', (after_bbox[0][0], after_bbox[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
 
     save_dir = Path('./runs/match/layout')
-    save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+    save_dir.mkdir(parents=True, exist_ok=True)  # make dir    
+
 
     cv2.imwrite(f"./runs/match/layout/matched_{before_idx}_{before_idx}_to_{after_idx}.jpg", before_img)
     cv2.imwrite(f"./runs/match/layout/matched_{after_idx}_{before_idx}_to_{after_idx}.jpg", after_img)
@@ -262,3 +334,7 @@ for idx in range(num_cams-1):
     after_bboxes = bboxes_all[after]
     matched = matchByOverlap(after_bboxes, before_bboxes_transformed)
     plotMatch(before, after, before_bboxes, after_bboxes, matched)
+
+idx = 0
+img = cv2.imread(f'data/layout/cam{idx}/0001.jpg')
+find_lines(img)
