@@ -21,7 +21,9 @@ model = weigths['model']
 model = model.half().to(device)
 _ = model.eval()
 
-image = cv2.imread('../data/layout/cam0/0001.jpg')
+
+cam = 'cam3'
+image = cv2.imread(f'../data/layout/{cam}/0001.jpg')
 image = letterbox(image, 640, stride=64, auto=True)[0]
 image_ = image.copy()
 image = transforms.ToTensor()(image)
@@ -55,18 +57,20 @@ nimg = cv2.cvtColor(nimg, cv2.COLOR_RGB2BGR)
 nbboxes = bboxes.tensor.detach().cpu().numpy().astype(np.int)
 pnimg = nimg.copy()
 
-for one_mask, bbox, cls, conf in zip(pred_masks_np, nbboxes, pred_cls, pred_conf):
-    if conf < 0.25:
-        continue
-    color = [np.random.randint(255), np.random.randint(255), np.random.randint(255)]
-                        
-                        
-    pnimg[one_mask] = pnimg[one_mask] * 0.5 + np.array(color, dtype=np.uint8) * 0.5
-    pnimg = cv2.rectangle(pnimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
-    #label = '%s %.3f' % (names[int(cls)], conf)
-    #t_size = cv2.getTextSize(label, 0, fontScale=0.5, thickness=1)[0]
-    #c2 = bbox[0] + t_size[0], bbox[1] - t_size[1] - 3
-    #pnimg = cv2.rectangle(pnimg, (bbox[0], bbox[1]), c2, color, -1, cv2.LINE_AA)  # filled
-    #pnimg = cv2.putText(pnimg, label, (bbox[0], bbox[1] - 2), 0, 0.5, [255, 255, 255], thickness=1, lineType=cv2.LINE_AA)  
+for idx, (one_mask, bbox, cls, conf) in enumerate(zip(pred_masks_np, nbboxes, pred_cls, pred_conf)):
+    if cls == 60:
+        if conf < 0.0:
+            continue
+        color = [np.random.randint(255), np.random.randint(255), np.random.randint(255)]
+                            
+        pnimg = np.zeros(nimg.shape)                 
+        pnimg[one_mask] = np.array(color, dtype=np.uint8) * 1
 
-    cv2.imwrite("../out.png", pnimg)
+        # pnimg = cv2.rectangle(pnimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
+        #label = '%s %.3f' % (names[int(cls)], conf)
+        #t_size = cv2.getTextSize(label, 0, fontScale=0.5, thickness=1)[0]
+        #c2 = bbox[0] + t_size[0], bbox[1] - t_size[1] - 3
+        #pnimg = cv2.rectangle(pnimg, (bbox[0], bbox[1]), c2, color, -1, cv2.LINE_AA)  # filled
+        #pnimg = cv2.putText(pnimg, label, (bbox[0], bbox[1] - 2), 0, 0.5, [255, 255, 255], thickness=1, lineType=cv2.LINE_AA)  
+        # pnimg = cv2.cvtColor(pnimg, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(f'../runs/mask/layout/{cam}/out_{idx}.png', pnimg)
