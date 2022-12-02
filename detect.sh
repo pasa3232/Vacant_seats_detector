@@ -8,5 +8,5 @@ do
         --name cam$id \
         --source data/$1/cam$id \
         --iou-thres 0.2 \
-        --img 640 --conf 0.25 --save-txt --no-trace
+        --img 640 --conf 0.05 --save-txt --no-trace
 done

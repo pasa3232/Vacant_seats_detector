@@ -27,10 +27,12 @@ _ = model.eval()
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='layout', help='dataset dir name')
+    parser.add_argument('--conf_thres', type=float, default=0.05, help='dataset dir name')
+    parser.add_argument('--iou_thres', type=float, default=0.2, help='dataset dir name')
     opt = parser.parse_args()
 
     for id in range(4):
-        p = f'../data/{opt.dataset}/cam{id}/0001.jpg'
+        p = f'../data/{opt.dataset}/cam{id}/00000.jpg'
         path = Path(p)
 
         image = cv2.imread(p)
@@ -51,7 +53,7 @@ if __name__ == '__main__':
         pooler_scale = model.pooler_scale
         pooler = ROIPooler(output_size=hyp['mask_resolution'], scales=(pooler_scale,), sampling_ratio=1, pooler_type='ROIAlignV2', canonical_level=2)
 
-        output, output_mask, output_mask_score, output_ac, output_ab = non_max_suppression_mask_conf(inf_out, attn, bases, pooler, hyp, conf_thres=0.1, iou_thres=0.2, merge=False, mask_iou=None)
+        output, output_mask, output_mask_score, output_ac, output_ab = non_max_suppression_mask_conf(inf_out, attn, bases, pooler, hyp, conf_thres=opt.conf_thres, iou_thres=opt.iou_thres, merge=False, mask_iou=None)
 
         pred, pred_masks = output[0], output_mask[0]
         base = bases[0]
@@ -69,7 +71,7 @@ if __name__ == '__main__':
 
         for idx, (one_mask, bbox, cls, conf) in enumerate(zip(pred_masks_np, nbboxes, pred_cls, pred_conf)):
             if cls == 60:
-                if conf < 0.1:
+                if conf < 0.05:
                     continue
                 color = [np.random.randint(255), np.random.randint(255), np.random.randint(255)]
                                     
@@ -85,6 +87,6 @@ if __name__ == '__main__':
         pnimg = cv2.cvtColor(pnimg, cv2.COLOR_RGB2BGR)
 
 
-        save_dir = Path(f'./runs/mask/{opt.dataset}/cam{id}')
+        save_dir = Path(f'../runs/mask/{opt.dataset}/cam{id}')
         save_dir.mkdir(parents=True, exist_ok=True)  # make dir
         cv2.imwrite(f'../runs/mask/{opt.dataset}/cam{id}/{path.name}', pnimg)
