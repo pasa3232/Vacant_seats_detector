@@ -4,7 +4,7 @@ import numpy as np
 def compute_h(p1, p2):
     # normalization
     # h, w = 2080, 3720
-    h, w = ...
+    h, w = 1456, 1928
     p1 = np.array([[p[1] / h, p[0] / w, 1] for p in p1])
     p2 = np.array([[p[1] / h, p[0] / w, 1] for p in p2])
 
