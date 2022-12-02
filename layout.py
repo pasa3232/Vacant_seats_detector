@@ -12,7 +12,7 @@ from shapely.geometry import Polygon
 num_cams = 4
 cam_poses = {} # key: cami, value: pose
 for i in range(num_cams):
-    with open(f'./params/camera_poses/{i:05d}.txt', 'r') as f:
+    with open(f'./camera_poses/{i:05d}.txt', 'r') as f:
         lines = f.readlines()
         pose = []
         for line in lines:
@@ -32,7 +32,7 @@ for i in range(num_cams):
     yolo_output = {} # key: class, value: yolo_output
     yolo_output['chair'], yolo_output['table'], yolo_output['person'] = [], [], []
 
-    with open(f'./runs/detect/layout/cam{i}/labels/0001.txt', 'r') as f:
+    with open(f'./runs/detect/layout/cam{i}/labels/00000.txt', 'r') as f:
         lines = f.readlines()
         for line in lines:
             data = list(map(float, line.split(" ")))
@@ -72,8 +72,8 @@ H = []
 cam_bbox_pairs = {}
 
 for id in range(num_cams - 1):
-    original_img = cv2.imread(f'./runs/detect/layout/cam{id}/0001.jpg')
-    img = cv2.imread(f'./runs/detect/layout/cam{id+1}/0001.jpg')
+    original_img = cv2.imread(f'./runs/detect/layout/cam{id}/00000.jpg')
+    img = cv2.imread(f'./runs/detect/layout/cam{id+1}/00000.jpg')
     c_in = cor_p[id]
     c_ref = cor_p[id + 1]
     H.append(compute_h(c_ref, c_in))
@@ -305,8 +305,8 @@ def find_lines(img):
 #   matched         : the indices i,j of the matches between the bounding boxes of tables in "before" and "after" image
 
 def plotMatch(before_idx, after_idx, before_bboxes, after_bboxes, matched):
-    before_img = cv2.imread(f'./runs/detect/layout/cam{before_idx}/0001.jpg')
-    after_img = cv2.imread(f'./runs/detect/layout/cam{after_idx}/0001.jpg')
+    before_img = cv2.imread(f'./runs/detect/layout/cam{before_idx}/00000.jpg')
+    after_img = cv2.imread(f'./runs/detect/layout/cam{after_idx}/00000.jpg')
     for i, (after, before) in enumerate(matched):
         before_bbox = before_bboxes[before]
         after_bbox = after_bboxes[after]
