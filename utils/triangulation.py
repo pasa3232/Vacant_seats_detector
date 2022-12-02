@@ -19,7 +19,7 @@ def triangulation(poses, X, Y):
     constraint_mat = np.array(constraint_mat).reshape(1, 8, 4).squeeze()
 
     # svd for solution
-    _, sigma , V = np.linalg.svd(constraint_mat)
+    _, sigma , V = np.linalg.svd(constraint_mat[:6,:])
     vh = V[-1, :]
     p3d = vh[:-1] / vh[-1]
 
