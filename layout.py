@@ -58,7 +58,8 @@ for i in range(num_cams):
 # cv2.circle(img, (int(w*x_), int(h*y_)), 5, (0, 0, 255), -1)
 # cv2.imwrite('person.png', img)
 
-h, w = 2080, 3720
+# h, w = 2080, 3720
+h, w = ...
 
 poses = [cam_poses[f'cam{i}'][:3, :] for i in range(num_cams)]
 
