@@ -61,8 +61,8 @@ def find_intersect(line_info1, line_info2):
         intersect = inv_det*(yin1-yin2), inv_det*(yin1*slope2 - yin2*slope1)
     return intersect
 
-slope_threshold = 0.3
-parallel_threshold = 8
+slope_threshold = 1
+parallel_threshold = 10
 dist_threshold = 20
 # lengthen nearby lines so that they intersect, and merge line segments that are on the same line
 # could return 1 or 2 lines
@@ -74,11 +74,11 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
     # lines that are close together
     # print(f'slopes: {slope1, slope2}')
     if (abs(slope1 - slope2) < slope_threshold):
-        if (x11 <= x21 and x12 <= x22 and np.linalg.norm(np.array([x12, y12] - np.array([x21, y21]))) < dist_threshold):
+        if (x11 <= x21 and x12 <= x22 and np.linalg.norm(np.array([x12, y12] - np.array([x21, y21]))) < parallel_threshold):
             # print('nearly parallel lines that are close together')
             line1[2], line1[3] = x22, y22
             return [line1]
-        if (x21 <= x11 and x22 <= x12 and np.linalg.norm(np.array([x11, y11] - np.array([x22, y22]))) < dist_threshold):
+        if (x21 <= x11 and x22 <= x12 and np.linalg.norm(np.array([x11, y11] - np.array([x22, y22]))) < parallel_threshold):
             # print('nearly parallel lines that are close together')
             line1[0], line1[1] = x21, y21
             return [line1]
@@ -107,7 +107,7 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
         if (min_dist1 < dist_threshold and min_dist2 < dist_threshold):
             line1[end1-1], line1[end1] = intersect[0], intersect[1]
             line2[end2-1], line2[end2] = intersect[0], intersect[1]
-            return [line1, line2]
+            return [line1, line2, intersect]
 
     elif (not (x21 <= intersect[0] <= x22) or not (min(y21, y22) <= intersect[1] <= max(y21, y22))):    # if the intersection point is on line1 but not on line2, lengthen line2
         left_dist2 = np.linalg.norm(np.array(intersect) - np.array([x21, y21]))
@@ -118,7 +118,7 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
             end2, min_dist2 = 3, right_dist2
         if (min_dist2 < dist_threshold):
             line2[end2-1], line2[end2] = intersect[0], intersect[1]
-            return [line1, line2]
+            return [line1, line2, intersect]
 
 
     elif (not (x11 <= intersect[0] <= x12) or not (min(y11, y12) <= intersect[1] <= max(y11, y12))):    # if the intersection point is on line2 but not on line1, lengthen line1
@@ -130,11 +130,11 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
             end1, min_dist1 = 3, right_dist1
         if (min_dist1 < dist_threshold):
             line1[end1-1], line1[end1] = intersect[0], intersect[1]
-            return [line1, line2]
+            return [line1, line2, intersect]
 
     # if the intersection point is on both line segments, this means the segments are touching, so we do not need to lengthen any of them
     # this part also deals with all other unhandled cases
-    return [line1, line2]
+    return [line1, line2, intersect]
     
 
 
@@ -147,18 +147,20 @@ def connect_lines(img, lines):
 
     # print(f'test y for line 2:\n{slopes[2]*lines[2][0]+y_in[2]}')
     # print(f'test y for line 3:\n{slopes[3]*lines[3][0]+y_in[3]}')
+    intersections = [[[] for _ in range(len(lines))] for _ in range(len(lines))]
+
     count = 0
     for i in range(len(lines)):
         x11,y11,x12,y12 = lines[i]
         if (x11 < 0 or y11 < 0 or x12 < 0 or y12 < 0):
             continue
-        if (count < 5): print(f'line i: {lines[i]}')
+        # if (count < 5): print(f'line i: {lines[i]}')
         for j in range(i+1, len(lines)):
             count += 1
             x21,y21,x22,y22 = lines[j]
             if (x21 < 0 or y21 < 0 or x22 < 0 or y22 < 0):
                 continue
-            if (count < 5): print(f'line j: {lines[j]}')
+            # if (count < 5): print(f'line j: {lines[j]}')
             
             line_info1 = [slope[i], y_in[i]]
             line_info2 = [slope[j], y_in[j]]
@@ -168,6 +170,10 @@ def connect_lines(img, lines):
                 lines[j] = [-5, -5, -5, -5]
             else:
                 lines[i], lines[j] = result[0], result[1]
+                if (len(result) == 3):
+                    intersections[i][j] = result[2]
+                    intersections[j][i] = result[2]
+                    
 
             # if (abs(slope[i] - slope[j]) < EPS):
             #     # TODO: connect parallel lines that have nearly identical y-in
@@ -191,15 +197,18 @@ def connect_lines(img, lines):
             
             if (count < 5): print(f'final lines: {lines[i], lines[j]}')
 
-    return lines, slope, y_in
+    return lines, slope, y_in, intersections
                 
             
 # find connected components. String of nodes as intersections btw lines (end when an intersection = beginning)
+# numpy connections
+connections = []
 
 # if length of connection < 4 (less than 4 intersections), create connections
     # if new node is out of bounds, discard the connection
 
 # if length of connection > 4:
+    # get rid of nodes
 
 # if length of connection == 4:
     # store Polygon area, connection info
@@ -209,19 +218,25 @@ def connect_lines(img, lines):
 # reduce nodes in table to 4. Use slope and line
 
 def test():
-    id = 1
+    id = 0
     directory = f'../runs/detect/layout/cam{id}/crops/dining table'
+    # directory = f'../utils'
     for file in os.listdir(directory):
         if ('0000' not in file):
             continue
+        # if ('segment_' not in file):
+        #     continue
         print(f'filename: {file}')
-        file_num = int(file.split('.')[0])
+        # file_num = int(file.split('.')[0])
+        file_num = int((file.split('.')[0]).split('_')[1])
         img_path = directory + '/' + file
         img = cv2.imread(img_path)
         img, lines = find_lines(img)
-        print(f'orig num lines: {len(lines)}')
-        lines, slope, y_in = connect_lines(img, lines)
+        # print(f'orig num lines: {len(lines)}')
+        lines, slope, y_in, intersections = connect_lines(img, lines)
         
+        # print(f'intersections:\n{intersections}')
+        print(f'shape of intersections:\n{len(intersections), len(intersections[0])}')
         # test connect_lines
         line_image = np.copy(img) * 0  # creating a blank to draw lines on
         # Run Hough on edge detected image
@@ -235,6 +250,7 @@ def test():
 
         cv2.imwrite(f'result{file_num}.jpeg', line_image)
         print(f'num lines: {len(lines)}')
+
     
         # after_img.append(find_lines(img))
 
