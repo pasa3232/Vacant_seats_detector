@@ -62,8 +62,8 @@ def find_intersect(line_info1, line_info2):
     return intersect
 
 slope_threshold = 1
-parallel_threshold = 10
-dist_threshold = 20
+parallel_threshold = 15
+dist_threshold = 15
 # lengthen nearby lines so that they intersect, and merge line segments that are on the same line
 # could return 1 or 2 lines
 # if this returns 1 line, then this means we have merged two consecutive lines, so we can delete the second line
@@ -203,9 +203,10 @@ def connect_lines(img, lines):
 # find connected components. String of nodes as intersections btw lines (end when an intersection = beginning)
 # numpy connections
 connections = []
+# brute force
 
 # if length of connection < 4 (less than 4 intersections), create connections
-    # if new node is out of bounds, discard the connection
+    # use endpoints as nodes
 
 # if length of connection > 4:
     # get rid of nodes
@@ -218,7 +219,7 @@ connections = []
 # reduce nodes in table to 4. Use slope and line
 
 def test():
-    id = 0
+    id = 1
     directory = f'../runs/detect/layout/cam{id}/crops/dining table'
     # directory = f'../utils'
     for file in os.listdir(directory):
@@ -227,8 +228,8 @@ def test():
         # if ('segment_' not in file):
         #     continue
         print(f'filename: {file}')
-        # file_num = int(file.split('.')[0])
-        file_num = int((file.split('.')[0]).split('_')[1])
+        file_num = int(file.split('.')[0])
+        # file_num = int((file.split('.')[0]).split('_')[1])
         img_path = directory + '/' + file
         img = cv2.imread(img_path)
         img, lines = find_lines(img)
@@ -236,7 +237,7 @@ def test():
         lines, slope, y_in, intersections = connect_lines(img, lines)
         
         # print(f'intersections:\n{intersections}')
-        print(f'shape of intersections:\n{len(intersections), len(intersections[0])}')
+        # print(f'shape of intersections:\n{len(intersections), len(intersections[0])}')
         # test connect_lines
         line_image = np.copy(img) * 0  # creating a blank to draw lines on
         # Run Hough on edge detected image
