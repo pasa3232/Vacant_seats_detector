@@ -43,9 +43,45 @@ for i in range(num_cams):
                 yolo_output['person'].append(np.array(data[1:5]))
         yolo_outputs[f'cam{i}'] = yolo_output
 
-h, w = 1456, 1928
+#------------------------------Triangluation---------------------------------------
 
+h, w = 1456, 1928
 poses = [cam_poses[f'cam{i}'][:3, :] for i in range(num_cams)]
+K = np.array([
+        [975.813843, 0, 960.973816],
+        [0, 975.475220, 729.893921],
+        [0, 0, 1]
+    ])
+
+triangulated = []
+for idx in range(len(cor_p[0])):
+    X = [cor_p[i][idx][0] for i in range(num_cams)]
+    Y = [cor_p[i][idx][1] for i in range(num_cams)]
+    triangulated.append(triangulation(poses, X, Y))
+triangulated = np.array(triangulated)
+# print(triangulated)
+
+cords = np.hstack((triangulated, np.ones((len(triangulated), 1))))
+_, sigma , V = np.linalg.svd(cords)
+plane = V[-1, :]
+# print(plane)
+
+def distToPlane(point, plane):
+    A, B, C, D = plane
+    x, y, z = point
+    return np.abs(A*x+B*y+C*z+D)/np.sqrt(np.sum(np.power([A, B, C],2)))
+
+# for cord in triangulated:
+#     print(distToPlane(cord, plane))
+
+def pixelToCord(pixel, Kinv, M):
+    vec = np.hstack(([0], Kinv @ pixel))
+    res = np.linalg.inv(M) @ vec
+    res = res[:-1]/res[-1]
+    return res
+
+
+#------------------------------Discretization---------------------------------------
 
 # Creates array of bounding box information given yolo-outputs of cam{id}
 # Input: id
@@ -115,9 +151,8 @@ for id in range(num_cams):
     cv2.imwrite(f"./runs/discretize/cam{id}/discretized_tables.jpg", res)
 '''
 
-
-bboxes_all = [yoloToBoxes(id) for id in range(num_cams)]
 # Search each bounding box and get pixel positions of [100, 100, 200] (BGR)
+bboxes_all = [yoloToBoxes(id) for id in range(num_cams)]
 pixels_all = []
 for id in range(num_cams):
     img = cv2.imread(f'./runs/discretize/cam{id}/discretized.jpg')
@@ -137,3 +172,17 @@ for id in range(num_cams):
                     pixels.append([x + minPoints[1], y + minPoints[0]])
     
     pixels_all.append(pixels)
+
+
+#------------------------------Conversion Example---------------------------------------
+
+Kinv = np.linalg.inv(K)
+pose = poses[0]
+M = np.vstack((plane, pose))
+
+pixel = cor_p[0][0] + [1]
+res = pixelToCord(pixel, Kinv, M)
+print("Pixel: ", pixel)
+print("Triangulated: ", triangulated[0])
+print("PixelToCord of Pixel: ", res)
+print("Distance to Plane: ", distToPlane(res, plane))
