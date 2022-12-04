@@ -12,7 +12,7 @@ from camera_models import *
 # backprojects image pixel (a, b) to point on table surface (X, Y, Z)
 # Input: n pixels of dimension n x 2, camera pose (R | t) of dimension 3 x 4, plane coefficients (A, B, C, D)
 # output: n points on table plane in world coordinate of dimension n x 3 
-def pixel2plane(pixels, pose, plane_coeffs):
+def pixel2plane(pixels, K, pose, plane_coeffs):
     pixels, pose, plane_coeffs = np.array(pixels), np.array(pose), np.array(plane_coeffs)
 
     pose = np.vstack((pose, np.array([0, 0, 0, 1])))
@@ -33,7 +33,7 @@ def pixel2plane(pixels, pose, plane_coeffs):
 # get table points on table plane by backprojecting table pixels of all cameras
 # Input: camera poses (R | t) of dimension 4 x 4, plane coefficients (A, B, C, D)
 # output: points of table on table plane in world coordinate of dimension n x 3 
-def get_table_points(poses, plane_coeffs):
+def get_table_points(K, poses, plane_coeffs):
     # points for tables backprojected to table plane from all cameras
     points_all = []
 
@@ -42,7 +42,7 @@ def get_table_points(poses, plane_coeffs):
         img = (np.round(img / 100) * 100).astype(np.uint8)
         pixels = np.argwhere(((img[:,:,0] == 100) & (img[:,:,1] == 100) & (img[:,:,2] == 200))) # (b, a)
         pose = poses[f'cam{i}'][:3, :]
-        points = pixel2plane(np.flip(pixels, axis=1), pose, plane_coeffs) # change pixels to (a, b)
+        points = pixel2plane(np.flip(pixels, axis=1), K, pose, plane_coeffs) # change pixels to (a, b)
         points_all = points_all + list(points)
     
     return np.array(points_all)
