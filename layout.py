@@ -227,6 +227,8 @@ A homography H maps an image from "before" to "after" (i.e. before --> H --> aft
 In most, if not all, of the usages, before will be cam{i}, after will be cam{i+1} for some index i
 '''
 
+
+
 # Finds matches between the two given bounding boxes
 # Input: after_bboxes, before_bboxes_transformed
 #   after_bboxes    : array of bounding box information of "after" image

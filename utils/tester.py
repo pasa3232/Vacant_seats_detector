@@ -93,6 +93,10 @@ def test_endpoint():
     
     print(f'lines:\n{lines}')
 
+
+def matrix_tester():
+    ...
+
 if __name__ == '__main__':
     slope, y_in = test_slope_intercept()
     # print(f'slope:\n{slope}\ny_in:\n{y_in}')

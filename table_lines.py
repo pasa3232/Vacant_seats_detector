@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
 import os
+import path
 import sys
 from pathlib import Path
 from PIL import Image
+
+from layout import yolo_outputs, yoloToBoxes
 
 # return list of line endpoints
 # reference: https://stackoverflow.com/questions/45322630/how-to-detect-lines-in-opencv
@@ -61,12 +64,37 @@ def find_intersect(line_info1, line_info2):
         intersect = inv_det*(yin1-yin2), inv_det*(yin1*slope2 - yin2*slope1)
     return intersect
 
-slope_threshold = 1
-parallel_threshold = 15
-dist_threshold = 15
+slope_threshold = 0.03
+parallel_threshold = 5
+parallel_high = 10
+dist_threshold = 20
 # lengthen nearby lines so that they intersect, and merge line segments that are on the same line
 # could return 1 or 2 lines
 # if this returns 1 line, then this means we have merged two consecutive lines, so we can delete the second line
+
+def make_lines(lines):
+    newlines = []
+    for i in range(len(lines)):
+        x11,y11,x12,y12 = lines[i]
+        for j in range(i+1, len(lines), 1):
+            x21,y21,x22,y22 = lines[j]
+            if (x11 <= x21 and x12 <= x22 and parallel_threshold < np.linalg.norm(np.array([x11, y11] - np.array([x21, y21]))) < parallel_high):
+                # print('nearly parallel lines that are apart')
+                # create new lines between endpoints
+                line3 = np.array([x11,y11,x21,y21])
+                line4 = np.array([x12,y12,x22,y22])
+                newlines.append(line3)
+                newlines.append(line4)
+            if (x21 <= x11 and x22 <= x12 and parallel_threshold < np.linalg.norm(np.array([x21, y21] - np.array([x11, y11]))) < parallel_high):
+                # print('nearly parallel lines that are apart')
+                # create new lines between endpoints
+                line3 = np.array([x21,y21,x11,y11])
+                line4 = np.array([x22,y22,x12,y12])
+                newlines.append(line3)
+                newlines.append(line4)
+    return newlines
+
+
 def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
     x11,y11,x12,y12 = line1
     x21,y21,x22,y22 = line2
@@ -89,6 +117,7 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
     # if the intersection point is not on either line segment, elongate both
     if ((not (x11 <= intersect[0] <= x12) or not (min(y11, y12) <= intersect[1] <= max(y11, y12))) and
         (not (x21 <= intersect[0] <= x22) or not (min(y21, y22) <= intersect[1] <= max(y11, y22)))):
+        # print('changed endpoints')
         left_dist1 = np.linalg.norm(np.array(intersect) - np.array([x11, y11]))
         right_dist1 = np.linalg.norm(np.array(intersect) - np.array([x12, y12]))
         left_dist2 = np.linalg.norm(np.array(intersect) - np.array([x21, y21]))
@@ -110,6 +139,7 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
             return [line1, line2, intersect]
 
     elif (not (x21 <= intersect[0] <= x22) or not (min(y21, y22) <= intersect[1] <= max(y21, y22))):    # if the intersection point is on line1 but not on line2, lengthen line2
+        # print('changed endpoints')
         left_dist2 = np.linalg.norm(np.array(intersect) - np.array([x21, y21]))
         right_dist2 = np.linalg.norm(np.array(intersect) - np.array([x22, y22]))
         if left_dist2 < right_dist2:
@@ -122,6 +152,7 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
 
 
     elif (not (x11 <= intersect[0] <= x12) or not (min(y11, y12) <= intersect[1] <= max(y11, y12))):    # if the intersection point is on line2 but not on line1, lengthen line1
+        # print('changed endpoints')
         left_dist1 = np.linalg.norm(np.array(intersect) - np.array([x11, y11]))
         right_dist1 = np.linalg.norm(np.array(intersect) - np.array([x12, y12]))
         if left_dist1 < right_dist1:
@@ -141,6 +172,12 @@ def change_endpoints(line1, line2, slope1, slope2, intersect, w, h):
 def connect_lines(img, lines):
     h, w = img.shape[0], img.shape[1]
     # print(f'h, w: {h, w}')
+    # print(f'original lines length: {len(lines)}')
+    newlines = make_lines(lines)
+    # print(f'new lines length: {len(newlines)}')
+    lines += newlines
+    # print(f'new lines length: {len(lines)}')
+    # print(f'lines:\n{lines}')
     slope, y_in = slope_intercept(lines)
     # print(f'slopes 2, 3:\n{slopes[2], slopes[3]}')
     # print(f'y_in 2, 3:\n{y_in[2], y_in[3]}')
@@ -173,96 +210,45 @@ def connect_lines(img, lines):
                 if (len(result) == 3):
                     intersections[i][j] = result[2]
                     intersections[j][i] = result[2]
+                if (len(result) == 4):
+                    lines.append(result[2])
+                    lines.append(result[3])
                     
-
-            # if (abs(slope[i] - slope[j]) < EPS):
-            #     # TODO: connect parallel lines that have nearly identical y-in
-            #     continue
-            # if (slope[i] == MAX):
-            #     if (count < 5): print('case 1: vertical')
-            #     intersect = y_in[i], slope[j]*y_in[i] + y_in[j]
-            # elif (slope[j] == MAX):
-            #     if (count < 5): print('case 2: vertical')
-            #     intersect = y_in[j], slope[i]*y_in[j] + y_in[i]
-            # else:
-            #     if (count < 5): print('case 3: intersect')
-            #     inv_det = 1/(slope[i]-slope[j])
-            #     intersect = inv_det*(y_in[i]-y_in[j]), inv_det*(-y_in[i]*slope[j] + y_in[j]*slope[i])
-            
-            # if (count < 5): print(f'intersect: {intersect}')
-            # if intersect point is on image
-
-            # TODO: replace code block with this line
-            # lines[i], lines[j] = change_endpoints(lines[i], lines[j], intersect, w, h)
-            
-            if (count < 5): print(f'final lines: {lines[i], lines[j]}')
 
     return lines, slope, y_in, intersections
                 
-            
-# find connected components. String of nodes as intersections btw lines (end when an intersection = beginning)
-# numpy connections
-connections = []
-# brute force
-
-# if length of connection < 4 (less than 4 intersections), create connections
-    # use endpoints as nodes
-
-# if length of connection > 4:
-    # get rid of nodes
-
-# if length of connection == 4:
-    # store Polygon area, connection info
-
-# find area of largest connected component -> use as table
-
-# reduce nodes in table to 4. Use slope and line
+        
 
 def test():
-    id = 1
-    directory = f'../runs/detect/layout/cam{id}/crops/dining table'
-    # directory = f'../utils'
-    for file in os.listdir(directory):
-        if ('0000' not in file):
-            continue
-        # if ('segment_' not in file):
+    
+    for id in range(4):
+        # if ('0000' not in file):
         #     continue
-        print(f'filename: {file}')
-        file_num = int(file.split('.')[0])
+        directory = f'../runs/detect/layout/cam{id}'
+        # if ('pic_' not in file):
+        #     continue
+        # file_num = int(file.split('.')[0])
         # file_num = int((file.split('.')[0]).split('_')[1])
-        img_path = directory + '/' + file
+        img_path = directory + '/discretized_tables.jpg'
         img = cv2.imread(img_path)
         img, lines = find_lines(img)
-        # print(f'orig num lines: {len(lines)}')
-        lines, slope, y_in, intersections = connect_lines(img, lines)
         
-        # print(f'intersections:\n{intersections}')
-        # print(f'shape of intersections:\n{len(intersections), len(intersections[0])}')
-        # test connect_lines
-        line_image = np.copy(img) * 0  # creating a blank to draw lines on
-        # Run Hough on edge detected image
-        # Output "lines" is an array containing endpoints of detected line segments
+        table_bbox = yolo_outputs[f'cam{id}']['table']
+        table_bbox = yoloToBoxes(id)
+        print(f'table_bbox:\n{table_bbox}')
 
+        bbox_path = directory + '/00000.jpg'
+        line_image = cv2.imread(bbox_path)
+        
         for line in lines:
             x1,y1,x2,y2 = line
             if (x1 < 0 or y1 < 0 or x2 < 0 or y2 < 0):
                 continue
-            cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),1)
+            cv2.line(line_image,(x1,y1),(x2,y2),(0,0,255),1)
 
-        cv2.imwrite(f'result{file_num}.jpeg', line_image)
+        cv2.imwrite(f'result{id}.jpeg', line_image)
         print(f'num lines: {len(lines)}')
 
-    
-        # after_img.append(find_lines(img))
-
-    # after_img = []
-    # for i in range(4):
-    #     img = cv2.imread(f'{i:05d}.jpeg')
-    #     result = find_lines(img)
-    #     after_img.append(result)
-    
-    # for i in range(len(after_img)):
-    #     cv2.imwrite(f"result{i:05d}.jpg", after_img[i])
 
 if __name__ == '__main__':
     test()
