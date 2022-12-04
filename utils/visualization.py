@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import open3d as o3d
+
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
 
 from camera_models import *
 
@@ -42,6 +46,44 @@ def get_table_points(poses, plane_coeffs):
         points_all = points_all + list(points)
     
     return np.array(points_all)
+
+
+
+# remove outlier points
+# Input: all points
+# Output: all points with outliers removed
+def remove_outliers(points):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd, _ = pcd.remove_radius_outlier(nb_points=16, radius=0.015)
+
+    return np.array(pcd.points)
+
+
+# cluster table points
+# Input: all table points on table surface
+# Output: clusterd table points
+def cluster_tables(points, num_tables, min_tables, max_tables):
+    # range_n_clusters = range(min_tables, max_tables + 1)
+    # scores = [0, 0, 0, 0]
+    # for n_clusters in range_n_clusters:
+    #     clusterer = KMeans(n_clusters=n_clusters, random_state=10)
+    #     cluster_labels = clusterer.fit_predict(points)
+    #     silhouette_avg = silhouette_score(points, cluster_labels)
+    #     scores.append(silhouette_avg)
+    #     print(
+    #         "For n_clusters =",
+    #         n_clusters,
+    #         "The average silhouette_score is :",
+    #         silhouette_avg,
+    #     )
+    clusterer = KMeans(n_clusters=num_tables, random_state=10)
+    cluster_labels = clusterer.fit_predict(points)
+    grouped_tables = [[] for _ in range(num_tables)]
+    for idx, label in enumerate(cluster_labels):
+        grouped_tables[label].append(points[idx])
+
+    return grouped_tables
 
 
 # https://github.com/mnslarcher/camera-models/blob/main/camera-models.ipynb
@@ -126,12 +168,36 @@ def show_world(plane_coeffs=None, points=None):
         surf = ax.plot_surface(x, y, z, alpha=0.2, linewidth=100)
 
     if points is not None:
-        points = points[::50]
-        ax.scatter(points[:, 0], points[:, 1], points[:, 2], color='y', marker=".")
+        color = ['r', 'g', 'b', 'c', 'y', 'm', 'b', 'w']
+        for i, group in enumerate(points):
+            group = np.array(group)
+            ax.scatter(group[:, 0], group[:, 1], group[:, 2], color=color[i], marker=".")
 
     plt.tight_layout()
     plt.show()
 
+
+def get_bbox(points):
+    return np.max(points, axis=0), np.min(points, axis=0)
+
+
+# printout layout from grouped points
+def print_layout(points, bbox_max, bbox_min, size):
+
+    bbox_size = bbox_max - bbox_min
+
+    layout = 255 * np.ones(size)
+    for group in points:
+        group = np.array(group)
+        group -= bbox_min
+        group /= bbox_size.max()
+        group *= size[0]
+        
+        for point in group:
+            point = list(map(int, point))
+            layout[point[2], point[0]] = 0
+    
+    cv2.imwrite('layout.png', layout)
 
 
 if __name__ == "__main__":
@@ -158,4 +224,8 @@ if __name__ == "__main__":
             cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
     points = get_table_points(cam_poses, plane_coeffs)
-    show_world(plane_coeffs=plane_coeffs, points=points)
+    points = remove_outliers(points)
+    bbox_max, bbox_min = get_bbox(points)
+    clustered_points = cluster_tables(points=points[::20], num_tables=6, min_tables=4, max_tables=10)
+    show_world(plane_coeffs=plane_coeffs, points=clustered_points)
+    print_layout(clustered_points, bbox_max, bbox_min, size=(400, 400))
