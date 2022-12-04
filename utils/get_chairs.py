@@ -31,6 +31,17 @@ def reprojection(points_3d, K, pose):
     return points_2d.T
 
 
+def get_area(points, m):
+    count = len(points)
+    vectors = np.zeros((count, count, len(points[0])))
+    for i in range(count):
+        for j in range(count):
+            vectors[i][j] = points[i] - points[j]
+    norms = [np.linalg.norm(vectors[i][(i+1)%count]) for i in range(count)]
+    res = [points[i] + m * (vectors[i][(i+1)%count]/norms[i] + vectors[i][i-1]/norms[i-1]) for i in range(count)]
+    return np.array(res)
+
+
 if __name__ == "__main__":
     K = np.array([
         [975.813843, 0, 960.973816],
@@ -67,8 +78,19 @@ if __name__ == "__main__":
         img = cv2.imread(f'./data/layout/cam{i}/00000.jpg')
         for idx, table_cluster in enumerate(clustered_points):
             corners_3d = get_corners_3d(table_cluster=table_cluster)
+            boundaries_3d = get_area(corners_3d, m=0.25)
+
             corners_2d = reprojection(corners_3d, K, cam_poses[f'cam{i}'])
-            for corner in corners_2d:
+            boundaries_2d = reprojection(boundaries_3d, K, cam_poses[f'cam{i}'])
+
+            corners_2d = corners_2d.astype(np.int)
+            corners_2d[(1, 2),:] = corners_2d[(2, 1),:]
+            boundaries_2d = boundaries_2d.astype(np.int)
+            boundaries_2d[(1, 2),:] = boundaries_2d[(2, 1),:]
+            for corner, boundary in zip(corners_2d, boundaries_2d):
                 cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
+                cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
+            cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
+            cv2.polylines(img, [boundaries_2d], isClosed=True, color=(0, 0, 255), thickness=3)
         cv2.imwrite(f'./runs/get_chairs/corners_cam{i}.jpg', img)
  
