@@ -92,5 +92,5 @@ if __name__ == "__main__":
                 cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
             cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
             cv2.polylines(img, [boundaries_2d], isClosed=True, color=(0, 0, 255), thickness=3)
-        cv2.imwrite(f'./runs/get_chairs/corners_cam{i}.jpg', img)
+        cv2.imwrite(f'./runs/get_chairs/cam{i}/corners_00000.jpg', img)
  
