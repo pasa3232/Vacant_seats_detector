@@ -4,17 +4,11 @@ import cv2
 
 from camera_models import *
 
-K = np.array([
-        [975.813843, 0, 960.973816],
-        [0, 975.475220, 729.893921],
-        [0, 0, 1]
-    ])
-
 
 # backprojects image pixel (a, b) to point on table surface (X, Y, Z)
 # Input: n pixels of dimension n x 2, camera pose (R | t) of dimension 3 x 4, plane coefficients (A, B, C, D)
-# output: n points on table surface in world coordinate of dimension n x 3 
-def pixel2surface(pixels, pose, plane_coeffs):
+# output: n points on table plane in world coordinate of dimension n x 3 
+def pixel2plane(pixels, pose, plane_coeffs):
     pixels, pose, plane_coeffs = np.array(pixels), np.array(pose), np.array(plane_coeffs)
 
     pose = np.vstack((pose, np.array([0, 0, 0, 1])))
@@ -32,7 +26,25 @@ def pixel2surface(pixels, pose, plane_coeffs):
     return points.T
 
 
+# get table points on table plane by backprojecting table pixels of all cameras
+# Input: camera poses (R | t) of dimension 4 x 4, plane coefficients (A, B, C, D)
+# output: points of table on table plane in world coordinate of dimension n x 3 
+def get_table_points(poses, plane_coeffs):
+    # points for tables backprojected to table plane from all cameras
+    points_all = []
 
+    for i in range(4):
+        img = cv2.imread(f'./runs/discretize/cam{i}/discretized.jpg')
+        img = (np.round(img / 100) * 100).astype(np.uint8)
+        pixels = np.argwhere(((img[:,:,0] == 100) & (img[:,:,1] == 100) & (img[:,:,2] == 200))) # (b, a)
+        pose = poses[f'cam{i}'][:3, :]
+        points = pixel2plane(np.flip(pixels, axis=1), pose, plane_coeffs) # change pixels to (a, b)
+        points_all = points_all + list(points)
+    
+    return np.array(points_all)
+
+
+# https://github.com/mnslarcher/camera-models/blob/main/camera-models.ipynb
 def show_world(plane_coeffs=None, points=None):
     ### fetch camera poses
     num_cams = 4
@@ -114,7 +126,7 @@ def show_world(plane_coeffs=None, points=None):
         surf = ax.plot_surface(x, y, z, alpha=0.2, linewidth=100)
 
     if points is not None:
-        points = points[::10]
+        points = points[::50]
         ax.scatter(points[:, 0], points[:, 1], points[:, 2], color='y', marker=".")
 
     plt.tight_layout()
@@ -122,18 +134,28 @@ def show_world(plane_coeffs=None, points=None):
 
 
 
-
-
-
 if __name__ == "__main__":
-    # show_world()
-    img = cv2.imread('./runs/discretize/cam0/discretized.jpg')
-    img = (np.round(img / 100) * 100).astype(np.uint8)
-    pixels = np.argwhere(((img[:,:,0] == 100) & (img[:,:,1] == 100) & (img[:,:,2] == 200))) # (b, a)
-    pose = np.zeros((3, 4))
-    pose[:3, :3] = np.eye(3)
+
+    K = np.array([
+        [975.813843, 0, 960.973816],
+        [0, 975.475220, 729.893921],
+        [0, 0, 1]
+    ])
+
     plane_coeffs = np.array([0.04389121, -0.49583658, -0.25795586, 0.82805701])
-    points = pixel2surface(np.flip(pixels, axis=1), pose, plane_coeffs) # change pixels to (a, b)
 
+    ### fetch camera poses
+    num_cams = 4
+    cam_poses = {} # key: cami, value: pose
+    for i in range(num_cams):
+        with open(f'./camera_poses/{i:05d}.txt', 'r') as f:
+            lines = f.readlines()
+            pose = []
+            for line in lines:
+                data = list(map(float, line.split(" ")))
+                pose.append(data)
+            pose = np.array(pose)
+            cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
+    points = get_table_points(cam_poses, plane_coeffs)
     show_world(plane_coeffs=plane_coeffs, points=points)
