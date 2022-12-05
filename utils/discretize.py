@@ -3,8 +3,7 @@ import sys
 import numpy as np
 import cv2
 
-from utils.homography import compute_h, cor_p
-from utils.triangulation import triangulation
+from utils.common import *
 from pathlib import Path
 from shapely.geometry import Polygon
 

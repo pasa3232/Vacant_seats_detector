@@ -4,30 +4,8 @@ import cv2
 import open3d as o3d
 
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_samples, silhouette_score
-
+from common import *
 from camera_models import *
-
-
-# backprojects image pixel (a, b) to point on table surface (X, Y, Z)
-# Input: n pixels of dimension n x 2, camera pose (R | t) of dimension 3 x 4, plane coefficients (A, B, C, D)
-# output: n points on table plane in world coordinate of dimension n x 3 
-def pixel2plane(pixels, K, pose, plane_coeffs):
-    pixels, pose, plane_coeffs = np.array(pixels), np.array(pose), np.array(plane_coeffs)
-
-    pose = np.vstack((pose, np.array([0, 0, 0, 1])))
-    pose = np.linalg.inv(pose)
-    pose = pose[:3, :]
-
-    pixels_h = np.insert(pixels, pixels.shape[1], 1, axis=1)
-    back_projection = np.linalg.inv(K) @ pixels_h.T
-    b = np.vstack((np.zeros(pixels.shape[0]), back_projection))
-
-    A = np.vstack((plane_coeffs, pose))
-
-    points = np.linalg.inv(A) @ b
-    points = np.divide(points, points[-1])[:3]
-    return points.T
 
 
 # get table points on table plane by backprojecting table pixels of all cameras
@@ -176,10 +154,6 @@ def show_world(plane_coeffs=None, points=None):
 
     plt.tight_layout()
     plt.show()
-
-
-def get_bbox(points):
-    return np.max(points, axis=0), np.min(points, axis=0)
 
 
 # printout layout from grouped points

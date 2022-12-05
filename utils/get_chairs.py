@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
-from visualization import *
+from utils.visualization import *
+from utils.common import *
 
 
 def get_corners_3d(table_cluster):
@@ -19,16 +20,6 @@ def get_corners_3d(table_cluster):
         np.array([table_cluster[idx_z_max][0], table_cluster[idx_z_max][1], z_max])
     ])
 
-
-def reprojection(points_3d, K, pose):
-    pose = np.linalg.inv(pose)
-    pose = pose[:3, :]
-    
-    points_3d_h = np.insert(points_3d, points_3d.shape[1], 1, axis=1)
-    reprojection = K @ pose @ points_3d_h.T
-    points_2d = np.divide(reprojection, reprojection[-1])[:2]
-
-    return points_2d.T
 
 
 def get_area(points, m):
