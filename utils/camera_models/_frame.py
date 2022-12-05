@@ -29,7 +29,7 @@ class ReferenceFrame:
         ax: Optional[Axes3D] = None,
     ) -> Axes3D:
         if ax is None:
-            ax = plt.gca(projection="3d")
+            ax = plt.subplot(projection="3d")
 
         ax.text(*self.origin + 0.5, f"({self.name})")
         ax = draw3d_arrow(
