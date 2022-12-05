@@ -223,7 +223,7 @@ if __name__ == "__main__":
             pose = np.array(pose)
             cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
-    points = get_table_points(cam_poses, plane_coeffs)
+    points = get_table_points(K, cam_poses, plane_coeffs)
     points = remove_outliers(points)
     bbox_max, bbox_min = get_bbox(points)
     clustered_points = cluster_tables(points=points[::20], num_tables=6, min_tables=4, max_tables=10)
