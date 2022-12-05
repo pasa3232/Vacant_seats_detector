@@ -149,7 +149,8 @@ def show_world(plane_coeffs=None, points=None):
         name="cam3",
     )
 
-    ax = plt.axes(projection="3d")
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
     world_frame.draw3d()
     camera_frame_1.draw3d()
     camera_frame_2.draw3d()
