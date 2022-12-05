@@ -157,21 +157,29 @@ def show_world(plane_coeffs=None, points=None):
 
 
 # printout layout from grouped points
-def print_layout(points, bbox_max, bbox_min, size):
-
-    bbox_size = bbox_max - bbox_min
-
-    layout = 255 * np.ones(size)
-    for group in points:
-        group = np.array(group)
-        group -= bbox_min
-        group /= bbox_size.max()
-        group *= size[0]
-        
-        for point in group:
-            point = list(map(int, point))
-            layout[point[2], point[0]] = 0
+def print_layout(clustered_points, plane_coeffs, mi, mx, width, height):
+    # clustered_pixels_layout = []
+    # for cluster in clustered_points:
+    #     cluster_layout = plane2layout(cluster, plane_coeffs)
+    #     pixels_layout = p2px(cluster_layout, mi, mx, width, height)
+    #     clustered_pixels_layout.append(cluster_layout)
     
+    # layout = np.ones((height, width))
+    # for clustered_pixels in clustered_pixels_layout:
+    #     layout[clustered_pixels[1], clustered_pixels[0]] = 0
+
+    points = []
+    for cluster in clustered_points:
+        points += cluster
+    
+    points_layout = plane2layout(points, plane_coeffs)
+    mx, mi = get_bbox(points_layout)
+    pixels_layout = p2px(points_layout, mi, mx, width, height)
+
+    layout = np.ones((height, width))
+    for pixel in pixels_layout:
+        layout[pixel[1], pixel[0]] = 255
+
     cv2.imwrite('layout.png', layout)
 
 
@@ -182,8 +190,6 @@ if __name__ == "__main__":
         [0, 975.475220, 729.893921],
         [0, 0, 1]
     ])
-
-    plane_coeffs = np.array([0.04389121, -0.49583658, -0.25795586, 0.82805701])
 
     ### fetch camera poses
     num_cams = 4
@@ -198,9 +204,13 @@ if __name__ == "__main__":
             pose = np.array(pose)
             cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
+    plane_coeffs = get_plane_coeffs(K, cam_poses)
     points = get_table_points(K, cam_poses, plane_coeffs)
     points = remove_outliers(points)
-    bbox_max, bbox_min = get_bbox(points)
+    mx, mi = get_bbox(points)
     clustered_points = cluster_tables(points=points[::20], num_tables=6, min_tables=4, max_tables=10)
     show_world(plane_coeffs=plane_coeffs, points=clustered_points)
-    print_layout(clustered_points, bbox_max, bbox_min, size=(400, 400))
+
+    width = 800
+    height = int(width * (mx[0] - mi[0]) / (mx[1] - mi[1]))
+    # print_layout(clustered_points=clustered_points, plane_coeffs=plane_coeffs, mi=mi, mx=mx, width=width, height=height)

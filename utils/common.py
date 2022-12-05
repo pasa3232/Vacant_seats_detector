@@ -32,6 +32,25 @@ def triangulation(poses, X, Y):
     return p3d
 
 
+def get_plane_coeffs(K, cam_poses):
+    h, w = 1456, 1928
+    poses = [cam_poses[f'cam{i}'][:3, :] for i in range(4)]
+
+    triangulated = []
+    for idx in range(len(cor_p[0])):
+        X = [cor_p[i][idx][0] for i in range(4)]
+        Y = [cor_p[i][idx][1] for i in range(4)]
+        triangulated.append(triangulation(poses, X, Y))
+    triangulated = np.array(triangulated)
+    # print(triangulated)
+
+    cords = np.hstack((triangulated, np.ones((len(triangulated), 1))))
+    _, _, V = np.linalg.svd(cords)
+    plane = V[-1, :]
+
+    return plane
+
+
 # backprojects image pixel (a, b) to point on table surface (X, Y, Z)
 # Input: n pixels of dimension n x 2, camera pose (R | t) of dimension 3 x 4, plane coefficients (A, B, C, D)
 # output: n points on table plane in world coordinate of dimension n x 3 
