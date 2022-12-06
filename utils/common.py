@@ -92,8 +92,8 @@ def plane2layout(points, plane):
     def norm(v):
         return v / np.sqrt(np.sum(v ** 2))
     
-    new_z = norm(plane[:3])
-    new_x = norm(np.cross(new_z, np.array([0, 1, 0])))
+    new_z = - norm(plane[:3])
+    new_x = - norm(np.cross(new_z, np.array([0, 1, 0])))
     new_y = norm(np.cross(new_z, new_x))
 
     def new_p(p):
@@ -109,13 +109,13 @@ def layout2plane(points, plane):
     def norm(v):
         return v / np.sqrt(np.sum(v ** 2))
     
-    new_z = norm(plane[:3])
-    new_x = norm(np.cross(new_z, np.array([0, 1, 0])))
+    new_z = - norm(plane[:3])
+    new_x = - norm(np.cross(new_z, np.array([0, 1, 0])))
     new_y = norm(np.cross(new_z, new_x))
 
     res = []
     for x, y in points:
-        z = -plane[3] / np.sqrt(np.sum(plane[:3] ** 2))
+        z = plane[3] / np.sqrt(np.sum(plane[:3] ** 2))
         res.append(x * new_x + y * new_y + z * new_z)
     return np.array(res)
 
