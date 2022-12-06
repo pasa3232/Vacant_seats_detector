@@ -2,7 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import json
- 
+
+from shapely.geometry import Polygon as Poly
+from shapely.geometry import Point
 from visualization import *
 from common import *
 
@@ -76,6 +78,43 @@ def get_area_points(points, m):
             points.append(pivot[0] + lines[i]/2)
     return np.array(points)
 
+# Creates array of bounding box information given yolo-outputs of cam{id}
+# Input: id
+# Output: an array of [center, bbox] corresponding to a chair
+#   bboxes  : an array of [center, bbox] corresponding to a chair
+#   center  : [horizontal, vertical] pixel values
+#   bbox    : [[horizontal, vertical] of the 4 corners of the bounding box]
+def yoloToBoxesChairs(id):
+
+    h, w = 1456, 1928
+    yolo_outputs = {} # key: cami, value: yolo_output
+    for i in range(num_cams):
+        yolo_output = {} # key: class, value: yolo_output
+        yolo_output['chair'] = []
+        with open(f'../runs/detect/layout/cam{i}/labels/00000.txt', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                data = list(map(float, line.split(" ")))
+                # check object class
+                if data[0] == 56 or data[0] == 11: # chair or bench
+                    yolo_output['chair'].append(np.array(data[1:5]))
+            yolo_outputs[f'cam{i}'] = yolo_output
+
+    bboxes = []
+    for i, table in enumerate(yolo_outputs[f'cam{id}']['chair']):
+        y_, x_, w_, h_ = table
+        vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        vertices = [[x_ + p[0] * h_ / 2, y_ + p[1] * w_ / 2] for p in vertices] # (vertical, horizontal)
+        center = np.array([int(y_ * w), int(x_ * h)])   # (horizontal, vertical)
+
+        bbox = []
+        for v in vertices:
+            point = [int(v[1] * w), int(v[0] * h)] 
+            bbox.append(point)
+        bbox = np.array(bbox)
+        bboxes.append([center, bbox])
+    return bboxes
+
 
 if __name__ == "__main__":
     K = np.array([
@@ -100,69 +139,80 @@ if __name__ == "__main__":
 
     plane_coeffs = get_plane_coeffs(K, cam_poses)
 
-    # Opening JSON file
-    # with open('../runs/table.json') as json_file:
-    #     points = json.load(json_file)
-
-    # print(points.keys())
-    
-
-    # # # get clustered points
-    # points = get_table_points(K, cam_poses, plane_coeffs)
-    # print(points.shape)
-    # points = remove_outliers(points)
-    # points = points[::20] # sample points for less computations
-    # bbox_max, bbox_min = get_bbox(points)
-
-    # # Table 3d points by group
-    # clustered_points = cluster_tables(points=points, num_tables=6, min_tables=4, max_tables=10)
-    # clustered_points[1] = np.delete(clustered_points[1], list(range(3850, 3900)), axis=0)
-    # print(np.array(clustered_points[0]).shape)
-
     clustered_points = get_table_points(K, cam_poses, plane_coeffs)
     clustered_points = [x[::20] for x in clustered_points]
 
+    chairPoints_all = []
 
     # get corner points for each table in 3D
-    for i in range(4):
-        img = cv2.imread(f'../data/layout/cam{i}/00000.jpg')
+    for i in range(num_cams):
+        # img = cv2.imread(f'../data/layout/cam{i}/00000.jpg')
+        chairPoints = []
         for idx, table_cluster in enumerate(clustered_points):
             # Reduce dimension
             table_2d = plane2layout(table_cluster, plane_coeffs)
 
-            # Getting corners in layout
+            # Getting corners in layout --> 3d points
             corners_2d = get_corners_2d(table_2d)
-
-            # Corners back to 3d points
             corners_3d = layout2plane(corners_2d, plane_coeffs)
 
             # Getting corners of areas
-            # boundaries_3d = get_area(corners_3d, m=0.15)
             boundaries_2d = get_area(corners_2d, m=0.15)
-            # print(boundaries_2d)
             boundaries_3d = layout2plane(boundaries_2d, plane_coeffs)
-            # boundaries_2d = layout2plane(boundaries_2d, plane_coeffs)
 
+            # Getting positions to look for chairs
             chairpos_2d = get_area_points(corners_2d, m=0.15)
             chairpos_3d = layout2plane(chairpos_2d, plane_coeffs)
 
+            # Reproject all above back to pixel space
             corners_2d = reprojection(corners_3d, K, cam_poses[f'cam{i}'])
             boundaries_2d = reprojection(boundaries_3d, K, cam_poses[f'cam{i}'])
             chairpos_2d = reprojection(chairpos_3d, K, cam_poses[f'cam{i}'])
 
             corners_2d = corners_2d.astype(int)
-            # corners_2d[(1, 2),:] = corners_2d[(2, 1),:]
             boundaries_2d = boundaries_2d.astype(int)
             chairpos_2d = chairpos_2d.astype(int)
-            # boundaries_2d[(1, 2),:] = boundaries_2d[(2, 1),:]
-            for corner, boundary in zip(corners_2d, boundaries_2d):
-                cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
-                cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
-            for chairpos in chairpos_2d:
-                cv2.circle(img, list(map(int, chairpos)), 10, (0, 255, 0), -1)
-            cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
-            cv2.polylines(img, [boundaries_2d], isClosed=True, color=(0, 0, 255), thickness=3)
-            cv2.polylines(img, [chairpos_2d], isClosed=True, color=(0, 255, 0), thickness=3)
+
+            chairPoints.append(chairpos_2d)
+
+            # for corner, boundary in zip(corners_2d, boundaries_2d):
+            #     cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
+            #     cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
+            # for chairpos in chairpos_2d:
+            #     cv2.circle(img, list(map(int, chairpos)), 10, (0, 255, 0), -1)
+            # cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
+            # cv2.polylines(img, [boundaries_2d], isClosed=True, color=(0, 0, 255), thickness=3)
+            # cv2.polylines(img, [chairpos_2d], isClosed=True, color=(0, 255, 0), thickness=3)
         # cv2.imwrite(f'../runs/get_chairs/cam{i}/corners_00000.jpg', img)
-        cv2.imwrite(f'../runs/get_chairs/cam{i}/targets_00000.jpg', img)
+        # cv2.imwrite(f'../runs/get_chairs/cam{i}/targets_00000.jpg', img)
+        chairPoints_all.append(chairPoints)
+
+    bboxes_all = [yoloToBoxesChairs(id) for id in range(num_cams)]
+
+    # includes_all <- includes_img <- includes_table
+    # includes_all[img_idx][table_idx][point_idx] = [0, 0, 0, 1, 0, 0, ... , 0]
+    # [0, 0, 0, 1, 0, 0, ... , 0]: 
+    #   length: number of chair bounding boxes in the image
+    #   1 at idx 3 means the point is included in the bounding box of chair 3
+    #   chairs are indexed by order of yolo outputs --> different indices for each chair in different image
+    # img_idx: 0, 1, 2, 3 correspond to cam0, 1, 2, 3
+    # table_idx: 0, 1, 2, 3, 4, 5 correspond to the clusters found in the previous visualisation stage
+    includes_all = []
+
+    for idx in range(num_cams):
+        chairPoints = chairPoints_all[idx]
+        bboxes = bboxes_all[idx]
+        polygons = [Poly(bbox[1]) for bbox in bboxes]
+        includes_img = []
+        for tableIdx in range(len(chairPoints)):
+            includes_table = []
+            points = chairPoints[tableIdx]
+            for point in points:
+                includes_table.append([1 if polygon.contains(Point(point)) else 0 for polygon in polygons])
+            includes_img.append(includes_table)
+        includes_all.append(includes_img)
+    print(np.array(includes_all))
+
+
+
  
