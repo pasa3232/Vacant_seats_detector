@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
-from utils.visualization import *
-from utils.common import *
+from visualization import *
+from common import *
 
 
 def get_corners_3d(table_cluster):
@@ -18,6 +18,19 @@ def get_corners_3d(table_cluster):
         np.array([x_max, table_cluster[idx_x_max][1], table_cluster[idx_x_max][2]]), 
         np.array([table_cluster[idx_z_min][0], table_cluster[idx_z_min][1], z_min]), 
         np.array([table_cluster[idx_z_max][0], table_cluster[idx_z_max][1], z_max])
+    ])
+
+
+def get_corners_2d(table_cluster):
+    x_max, y_max = np.max(table_cluster, axis=0)
+    x_min, y_min = np.min(table_cluster, axis=0)
+    
+    # four corners: (x_min, y_x_min), (x_max, y_x_max), (x_y_max, y_max), (x_y_min, y_min)
+    return np.array([
+        np.array([x_min, y_max]), 
+        np.array([x_max, y_max]),
+        np.array([x_max, y_min]),
+        np.array([x_min, y_min])
     ])
 
 
@@ -40,7 +53,6 @@ if __name__ == "__main__":
         [0, 0, 1]
     ])
 
-    plane_coeffs = np.array([0.04389121, -0.49583658, -0.25795586, 0.82805701])
 
     ### fetch camera poses
     num_cams = 4
@@ -55,6 +67,8 @@ if __name__ == "__main__":
             pose = np.array(pose)
             cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
+    plane_coeffs = get_plane_coeffs(K, cam_poses)
+
     # get clustered points
     points = get_table_points(K, cam_poses, plane_coeffs)
     points = remove_outliers(points)
@@ -68,16 +82,19 @@ if __name__ == "__main__":
     for i in range(4):
         img = cv2.imread(f'./data/layout/cam{i}/00000.jpg')
         for idx, table_cluster in enumerate(clustered_points):
-            corners_3d = get_corners_3d(table_cluster=table_cluster)
+            table_2d = plane2layout(table_cluster, plane_coeffs)
+            corners_2d = get_corners_2d(table_2d)
+            corners_3d = layout2plane(corners_2d, plane_coeffs)
             boundaries_3d = get_area(corners_3d, m=0.25)
+            # boundaries_2d = layout2plane(boundaries_2d, plane_coeffs)
 
             corners_2d = reprojection(corners_3d, K, cam_poses[f'cam{i}'])
             boundaries_2d = reprojection(boundaries_3d, K, cam_poses[f'cam{i}'])
 
             corners_2d = corners_2d.astype(np.int)
-            corners_2d[(1, 2),:] = corners_2d[(2, 1),:]
+            # corners_2d[(1, 2),:] = corners_2d[(2, 1),:]
             boundaries_2d = boundaries_2d.astype(np.int)
-            boundaries_2d[(1, 2),:] = boundaries_2d[(2, 1),:]
+            # boundaries_2d[(1, 2),:] = boundaries_2d[(2, 1),:]
             for corner, boundary in zip(corners_2d, boundaries_2d):
                 cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
                 cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
