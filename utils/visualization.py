@@ -6,6 +6,7 @@ import open3d as o3d
 from sklearn.cluster import KMeans
 from common import *
 from camera_models import *
+from get_chairs import *
 
 
 # get table points on table plane by backprojecting table pixels of all cameras
@@ -65,7 +66,7 @@ def cluster_tables(points, num_tables, min_tables, max_tables):
 
 
 # https://github.com/mnslarcher/camera-models/blob/main/camera-models.ipynb
-def show_world(plane_coeffs=None, points=None):
+def show_world(plane_coeffs=None, points=None, boundaries=None):
     ### fetch camera poses
     num_cams = 4
     cam_poses = {} # key: cami, value: pose
@@ -152,6 +153,12 @@ def show_world(plane_coeffs=None, points=None):
             group = np.array(group)
             ax.scatter(group[:, 0], group[:, 1], group[:, 2], color=color[i], marker=".")
 
+    if boundaries is not None:
+        color = ['r', 'g', 'b', 'c', 'y', 'm', 'b', 'w']
+        for i, boundary in enumerate(boundaries):
+            boundary = np.array(boundary)
+            ax.scatter(boundary[:, 0], boundary[:, 1], boundary[:, 2], color=color[i])
+
     plt.tight_layout()
     plt.show()
 
@@ -207,9 +214,19 @@ if __name__ == "__main__":
     plane_coeffs = get_plane_coeffs(K, cam_poses)
     points = get_table_points(K, cam_poses, plane_coeffs)
     points = remove_outliers(points)
-    mx, mi = get_bbox(points)
+    mx, mi = get_bbox(plane2layout(points, plane_coeffs))
     clustered_points = cluster_tables(points=points[::20], num_tables=6, min_tables=4, max_tables=10)
-    show_world(plane_coeffs=plane_coeffs, points=clustered_points)
+    clustered_points[1] = np.delete(clustered_points[1], list(range(3850, 3900)), axis=0)
+
+    boundaries = []
+    for table_cluster in clustered_points:
+        table_2d = plane2layout(table_cluster, plane_coeffs)
+        corners_2d = get_corners_2d(table_2d)
+        corners_3d = layout2plane(corners_2d, plane_coeffs)
+        boundaries_3d = get_area(corners_3d, m=0.25)
+        boundaries.append(boundaries_3d)
+
+    show_world(plane_coeffs=plane_coeffs, points=clustered_points, boundaries=boundaries)
 
     width = 800
     height = int(width * (mx[0] - mi[0]) / (mx[1] - mi[1]))
