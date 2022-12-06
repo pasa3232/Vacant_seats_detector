@@ -2,29 +2,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import open3d as o3d
+import json
 
 from sklearn.cluster import KMeans
 from common import *
 from camera_models import *
 from get_chairs import *
 
+num_cams = 4
 
 # get table points on table plane by backprojecting table pixels of all cameras
 # Input: camera poses (R | t) of dimension 4 x 4, plane coefficients (A, B, C, D)
 # output: points of table on table plane in world coordinate of dimension n x 3 
+# from table.json --> 3d points on plane
 def get_table_points(K, poses, plane_coeffs):
     # points for tables backprojected to table plane from all cameras
-    points_all = []
-
-    for i in range(4):
-        img = cv2.imread(f'./runs/discretize/cam{i}/discretized.jpg')
-        img = (np.round(img / 100) * 100).astype(np.uint8)
-        pixels = np.argwhere(((img[:,:,0] == 100) & (img[:,:,1] == 100) & (img[:,:,2] == 200))) # (b, a)
-        pose = poses[f'cam{i}'][:3, :]
-        points = pixel2plane(np.flip(pixels, axis=1), K, pose, plane_coeffs) # change pixels to (a, b)
-        points_all = points_all + list(points)
     
-    return np.array(points_all)
+    with open('../runs/table.json') as json_file:
+        tables = json.load(json_file)["tables"]
+
+    points_all = [[] for i in range(len(tables))]
+    for idx, table in enumerate(tables):
+        for i in range(num_cams):
+            pixels = table[f"cam{i}"]
+            pose = poses[f'cam{i}'][:3, :]
+            points = pixel2plane(np.flip(pixels, axis=1), K, pose, plane_coeffs)
+            points_all[idx] += list(points)
+
+    # for i in range(4):
+    #     img = cv2.imread(f'../runs/discretize/cam{i}/discretized.jpg')
+    #     img = (np.round(img / 100) * 100).astype(np.uint8)
+    #     pixels = np.argwhere(((img[:,:,0] == 100) & (img[:,:,1] == 100) & (img[:,:,2] == 200))) # (b, a)
+    #     pose = poses[f'cam{i}'][:3, :]
+    #     points = pixel2plane(np.flip(pixels, axis=1), K, pose, plane_coeffs) # change pixels to (a, b)
+    #     points_all = points_all + list(points)
+    
+    return [np.array(points) for points in points_all]
 
 
 
