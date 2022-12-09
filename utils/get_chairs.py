@@ -143,11 +143,13 @@ if __name__ == "__main__":
     clustered_points = [x[::20] for x in clustered_points]
 
     chairPoints_all = []
+    chairPath_all = []
 
     # get corner points for each table in 3D
     for i in range(num_cams):
-        # img = cv2.imread(f'../data/layout/cam{i}/00000.jpg')
+        img = cv2.imread(f'../data/layout/cam{i}/00000.jpg')
         chairPoints = []
+        chairPaths = []
         for idx, table_cluster in enumerate(clustered_points):
             # Reduce dimension
             table_2d = plane2layout(table_cluster, plane_coeffs)
@@ -157,12 +159,24 @@ if __name__ == "__main__":
             corners_3d = layout2plane(corners_2d, plane_coeffs)
 
             # Getting corners of areas
-            boundaries_2d = get_area(corners_2d, m=0.15)
+            boundaries_2d = get_area(corners_2d, m=0.20)
             boundaries_3d = layout2plane(boundaries_2d, plane_coeffs)
 
             # Getting positions to look for chairs
-            chairpos_2d = get_area_points(corners_2d, m=0.15)
+            chairpos_2d = get_area_points(corners_2d, m=0.20)
             chairpos_3d = layout2plane(chairpos_2d, plane_coeffs)
+
+            centers_2d = np.array([corners_2d[0][0] + corners_2d[1][0], corners_2d[0][1] + corners_2d[2][1]])/2
+            chairPath_2d = []
+            chairPath_3d = []
+            step = 10
+            for chair_x, chair_y in chairpos_2d:
+                chairPath_2d.append(np.array(list(zip(
+                    np.linspace(centers_2d[0], chair_x, step+1),
+                    np.linspace(centers_2d[1], chair_y, step+1)))))
+                chairPath_3d.append(layout2plane(chairPath_2d[-1], plane_coeffs))
+                chairPath_2d[-1] = reprojection(chairPath_3d[-1], K, cam_poses[f'cam{i}'])
+            chairPath_2d = np.array([x.astype(int) for x in chairPath_2d])
 
             # Reproject all above back to pixel space
             corners_2d = reprojection(corners_3d, K, cam_poses[f'cam{i}'])
@@ -174,44 +188,73 @@ if __name__ == "__main__":
             chairpos_2d = chairpos_2d.astype(int)
 
             chairPoints.append(chairpos_2d)
-
-            # for corner, boundary in zip(corners_2d, boundaries_2d):
-            #     cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
-            #     cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
-            # for chairpos in chairpos_2d:
-            #     cv2.circle(img, list(map(int, chairpos)), 10, (0, 255, 0), -1)
-            # cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
+            chairPaths.append(chairPath_2d)
+            for corner, boundary in zip(corners_2d, boundaries_2d):
+                cv2.circle(img, list(map(int, corner)), 10, (255, 0, 0), -1)
+                # cv2.circle(img, list(map(int, boundary)), 10, (0, 0, 255), -1)
+            for chairpos in chairpos_2d:
+                cv2.circle(img, list(map(int, chairpos)), 10, (0, 255, 0), -1)
+            for chairPath in chairPath_2d:
+                for point in chairPath:
+                    cv2.circle(img, list(map(int, point)), 5, (0, 255, 255), -1)
+            cv2.polylines(img, [corners_2d], isClosed=True, color=(255, 0, 0), thickness=3)
             # cv2.polylines(img, [boundaries_2d], isClosed=True, color=(0, 0, 255), thickness=3)
-            # cv2.polylines(img, [chairpos_2d], isClosed=True, color=(0, 255, 0), thickness=3)
+            cv2.polylines(img, [chairpos_2d], isClosed=True, color=(0, 255, 0), thickness=3)
+
+            cv2.putText(img, str(idx), corners_2d[0] - np.array([20, 20]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), thickness=3)
         # cv2.imwrite(f'../runs/get_chairs/cam{i}/corners_00000.jpg', img)
-        # cv2.imwrite(f'../runs/get_chairs/cam{i}/targets_00000.jpg', img)
+        cv2.imwrite(f'../runs/get_chairs/cam{i}/targets_00000.jpg', img)
+
         chairPoints_all.append(chairPoints)
+        chairPath_all.append(chairPaths)
 
     bboxes_all = [yoloToBoxesChairs(id) for id in range(num_cams)]
 
-    # includes_all <- includes_img <- includes_table
-    # includes_all[img_idx][table_idx][point_idx] = [0, 0, 0, 1, 0, 0, ... , 0]
-    # [0, 0, 0, 1, 0, 0, ... , 0]: 
-    #   length: number of chair bounding boxes in the image
-    #   1 at idx 3 means the point is included in the bounding box of chair 3
-    #   chairs are indexed by order of yolo outputs --> different indices for each chair in different image
-    # img_idx: 0, 1, 2, 3 correspond to cam0, 1, 2, 3
-    # table_idx: 0, 1, 2, 3, 4, 5 correspond to the clusters found in the previous visualisation stage
-    includes_all = []
+    counts = []
 
     for idx in range(num_cams):
-        chairPoints = chairPoints_all[idx]
+        pose = cam_poses[f'cam{idx}']
+        camera_center = pose[:-1, -1]
+
+        # Targets for each table in the image # shape = (6, 6, 2) : table_count, targets, xy
+        chairPoint = np.array(chairPoints_all[idx])
+        table_count, targets, _ = chairPoint.shape
+
+        tableCenters = np.array([x[0][0] for x in chairPath_all[idx]])
+        
         bboxes = bboxes_all[idx]
-        polygons = [Poly(bbox[1]) for bbox in bboxes]
-        includes_img = []
-        for tableIdx in range(len(chairPoints)):
-            includes_table = []
-            points = chairPoints[tableIdx]
-            for point in points:
-                includes_table.append([1 if polygon.contains(Point(point)) else 0 for polygon in polygons])
-            includes_img.append(includes_table)
-        includes_all.append(includes_img)
-    print(np.array(includes_all))
+        polygons = [(bbox[0], Poly(bbox[1])) for bbox in bboxes]
+        occupied = [[0 for i in range(targets)] for j in range(table_count)]
+        max = 99999999
+        # print(len(polygons))
+        for center, polygon in polygons:
+            # closestTable = np.argmin([np.linalg.norm(center - tableCenters[i]) for i in range(table_count)])
+            # closestChair = np.argmin([np.linalg.norm(center - chairPoint[closestTable][j]) for j in range(targets)])
+            center = pixel2plane(np.array([center]), K, pose[:-1, :], plane_coeffs)[0]
+            closestTable = -1
+            closestChair = -1
+            toTableCenter = [np.linalg.norm(center - pixel2plane(np.array([tableCenters[i]]), K, pose[:-1, :], plane_coeffs)[0])
+                                            for i in range(table_count)]
+            toTarget = [np.linalg.norm(center - pixel2plane(np.array([chairPoint[closestTable][j]]), K, pose[:-1, :], plane_coeffs)[0])
+                                            for j in range(targets)]
+            while(True):
+                closestTable = np.argmin(toTableCenter)
+                closestTarget = np.argmin(toTarget)
+                if occupied[closestTable][closestTarget] == 1:
+                    if toTarget[closestTarget] == max:
+                        toTableCenter[closestTable] = max
+                    else:
+                        toTarget[closestTarget] = max
+                else:
+                    occupied[closestTable][closestTarget] = 1
+                    break
+        print(occupied, np.sum(np.array(occupied)), sep = " ")
+        counts.append([np.sum(x) for x in occupied])
+
+    counts = np.array(counts)
+    # print(counts[:,0])
+    for i in range(table_count):
+        print("Table", i, ":", np.max(counts[:,i]), "Chairs", sep=" ")
 
 
 
