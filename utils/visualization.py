@@ -18,7 +18,7 @@ num_cams = 4
 def get_table_points(K, poses, plane_coeffs):
     # points for tables backprojected to table plane from all cameras
     
-    with open('../runs/table.json') as json_file:
+    with open('runs/table.json') as json_file:
         tables = json.load(json_file)["tables"]
 
     points_all = [[] for i in range(len(tables))]
@@ -224,23 +224,25 @@ if __name__ == "__main__":
             pose = np.array(pose)
             cam_poses[f'cam{i}'] = pose.reshape(4, 4)
 
+    # get table points from json
     plane_coeffs = get_plane_coeffs(K, cam_poses)
     points = get_table_points(K, cam_poses, plane_coeffs)
-    points = remove_outliers(points)
-    mx, mi = get_bbox(plane2layout(points, plane_coeffs))
-    clustered_points = cluster_tables(points=points[::20], num_tables=6, min_tables=4, max_tables=10)
-    clustered_points[1] = np.delete(clustered_points[1], list(range(3850, 3900)), axis=0)
 
+    # get boundary points for each table
     boundaries = []
-    for table_cluster in clustered_points:
+    for table_cluster in points:
         table_2d = plane2layout(table_cluster, plane_coeffs)
         corners_2d = get_corners_2d(table_2d)
         corners_3d = layout2plane(corners_2d, plane_coeffs)
         boundaries_3d = get_area(corners_3d, m=0.25)
         boundaries.append(boundaries_3d)
 
-    show_world(plane_coeffs=plane_coeffs, points=clustered_points, boundaries=boundaries)
+    # show all
+    show_world(plane_coeffs=plane_coeffs, points=points, boundaries=boundaries)
 
+    # save layout
+    all_points = np.concatenate(points, axis=0)
+    mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
     width = 800
     height = int(width * (mx[0] - mi[0]) / (mx[1] - mi[1]))
     # print_layout(clustered_points=clustered_points, plane_coeffs=plane_coeffs, mi=mi, mx=mx, width=width, height=height)
