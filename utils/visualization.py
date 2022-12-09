@@ -241,8 +241,8 @@ if __name__ == "__main__":
     show_world(plane_coeffs=plane_coeffs, points=points, boundaries=boundaries)
 
     # save layout
-    all_points = np.concatenate(points, axis=0)
-    mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
-    width = 800
-    height = int(width * (mx[0] - mi[0]) / (mx[1] - mi[1]))
-    # print_layout(clustered_points=clustered_points, plane_coeffs=plane_coeffs, mi=mi, mx=mx, width=width, height=height)
+    # all_points = np.concatenate(points, axis=0)
+    # mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
+    # width = 800
+    # height = int(width * (mx[0] - mi[0]) / (mx[1] - mi[1]))
+    

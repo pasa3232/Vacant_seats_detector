@@ -259,6 +259,32 @@ if __name__ == "__main__":
     # print(counts[:,0])
     for i in range(table_count):
         print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+
+    
+    points = get_table_points(K, cam_poses, plane_coeffs)
+    all_points = np.concatenate(points, axis=0)
+    mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
+
+    width = 851
+    height = 800
+    layout = 255 * np.ones((height, width, 3))
+
+    for idx, table_cluster in enumerate(points):
+        table_2d = plane2layout(table_cluster, plane_coeffs)
+        corners_2d = get_corners_2d(table_2d)
+        chairpos_2d = get_area_points(corners_2d, m=0.25)
+
+        #draw tables
+        layout_table_2d = p2px(corners_2d, mi, mx, width, height)
+        cv2.rectangle(layout, layout_table_2d[0], layout_table_2d[2], color=(135, 184, 222), thickness=-1)
+        
+        #draw_chairs
+        layout_chair_2d = p2px(chairpos_2d, mi, mx, width, height)
+        for i, chair in enumerate(layout_chair_2d):
+            if occupied_all[np.argmax(counts[:,idx]), idx][i]:
+                cv2.circle(layout, chair, radius=20, color=(45, 82, 160), thickness=-1)
+
+        cv2.imwrite('layout.png', layout)
     
 
     
