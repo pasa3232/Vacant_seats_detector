@@ -121,10 +121,10 @@ def layout2plane(points, plane):
 
 
 def p2px(p, mi_px, mx_px, width, height):
-    return ((p - mi_px) / (mx_px - mi_px) * np.array([width, height])).astype(int)
+    return (((p - mi_px) / (mx_px - mi_px) * np.array([0.8 * width, 0.8 * height])) + np.array([0.1 * width, 0.1 * height])).astype(int)
 
 def px2p(p, mi_px, mx_px, width, height):
-    return p / np.array([width, height]) * (mx_px - mi_px) + mi_px
+    return (p - np.array([0.1 * width, 0.1 * height])) / np.array([0.8 * width, 0.8 * height]) * (mx_px - mi_px) + mi_px
 
 def get_bbox(points):
     return np.max(points, axis=0), np.min(points, axis=0)
