@@ -78,6 +78,7 @@ def get_area_points(points, m):
             points.append(pivot[0] + lines[i]/2)
     return np.array(points)
 
+
 # Creates array of bounding box information given yolo-outputs of cam{id}
 # Input: id
 # Output: an array of [center, bbox] corresponding to a chair
@@ -91,7 +92,7 @@ def yoloToBoxesChairs(id):
     for i in range(num_cams):
         yolo_output = {} # key: class, value: yolo_output
         yolo_output['chair'] = []
-        with open(f'../runs/detect/layout/cam{i}/labels/00000.txt', 'r') as f:
+        with open(f'runs/detect/layout/cam{i}/labels/00000.txt', 'r') as f:
             lines = f.readlines()
             for line in lines:
                 data = list(map(float, line.split(" ")))
@@ -128,7 +129,7 @@ if __name__ == "__main__":
     num_cams = 4
     cam_poses = {} # key: cami, value: pose
     for i in range(num_cams):
-        with open(f'../camera_poses/{i:05d}.txt', 'r') as f:
+        with open(f'camera_poses/{i:05d}.txt', 'r') as f:
             lines = f.readlines()
             pose = []
             for line in lines:
@@ -139,18 +140,17 @@ if __name__ == "__main__":
 
     plane_coeffs = get_plane_coeffs(K, cam_poses)
 
-    clustered_points = get_table_points(K, cam_poses, plane_coeffs)
-    clustered_points = [x[::20] for x in clustered_points]
+    points = get_table_points(K, cam_poses, plane_coeffs)
 
     chairPoints_all = []
     chairPath_all = []
 
     # get corner points for each table in 3D
     for i in range(num_cams):
-        img = cv2.imread(f'../data/layout/cam{i}/00000.jpg')
+        img = cv2.imread(f'data/layout/cam{i}/00000.jpg')
         chairPoints = []
         chairPaths = []
-        for idx, table_cluster in enumerate(clustered_points):
+        for idx, table_cluster in enumerate(points):
             # Reduce dimension
             table_2d = plane2layout(table_cluster, plane_coeffs)
 
@@ -163,7 +163,7 @@ if __name__ == "__main__":
             boundaries_3d = layout2plane(boundaries_2d, plane_coeffs)
 
             # Getting positions to look for chairs
-            chairpos_2d = get_area_points(corners_2d, m=0.20)
+            chairpos_2d = get_area_points(corners_2d, m=0.25)
             chairpos_3d = layout2plane(chairpos_2d, plane_coeffs)
 
             centers_2d = np.array([corners_2d[0][0] + corners_2d[1][0], corners_2d[0][1] + corners_2d[2][1]])/2
@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
             cv2.putText(img, str(idx), corners_2d[0] - np.array([20, 20]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), thickness=3)
         # cv2.imwrite(f'../runs/get_chairs/cam{i}/corners_00000.jpg', img)
-        cv2.imwrite(f'../runs/get_chairs/cam{i}/targets_00000.jpg', img)
+        cv2.imwrite(f'runs/get_chairs/cam{i}/targets_00000.jpg', img)
 
         chairPoints_all.append(chairPoints)
         chairPath_all.append(chairPaths)
@@ -212,6 +212,7 @@ if __name__ == "__main__":
 
     counts = []
 
+    occupied_all = []
     for idx in range(num_cams):
         pose = cam_poses[f'cam{idx}']
         camera_center = pose[:-1, -1]
@@ -225,12 +226,13 @@ if __name__ == "__main__":
         bboxes = bboxes_all[idx]
         polygons = [(bbox[0], Poly(bbox[1])) for bbox in bboxes]
         occupied = [[0 for i in range(targets)] for j in range(table_count)]
+        
         max = 99999999
         # print(len(polygons))
         for center, polygon in polygons:
             # closestTable = np.argmin([np.linalg.norm(center - tableCenters[i]) for i in range(table_count)])
             # closestChair = np.argmin([np.linalg.norm(center - chairPoint[closestTable][j]) for j in range(targets)])
-            center = pixel2plane(np.array([center]), K, pose[:-1, :], plane_coeffs)[0]
+            center = pixel2plane(np.array([center]) + np.array([0, (min(polygon.exterior.coords.xy[1]) - center[1]) // 3]), K, pose[:-1, :], plane_coeffs)[0]
             closestTable = -1
             closestChair = -1
             toTableCenter = [np.linalg.norm(center - pixel2plane(np.array([tableCenters[i]]), K, pose[:-1, :], plane_coeffs)[0])
@@ -249,12 +251,17 @@ if __name__ == "__main__":
                     occupied[closestTable][closestTarget] = 1
                     break
         print(occupied, np.sum(np.array(occupied)), sep = " ")
+        occupied_all.append(occupied)
         counts.append([np.sum(x) for x in occupied])
 
     counts = np.array(counts)
+    occupied_all = np.array(occupied_all)
     # print(counts[:,0])
     for i in range(table_count):
-        print("Table", i, ":", np.max(counts[:,i]), "Chairs", sep=" ")
+        print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+    
+
+    
 
 
 
