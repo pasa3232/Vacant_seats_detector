@@ -229,11 +229,13 @@ def assign_chairs(cam_poses, chairPoints_all, chairPath_all, bboxes_all):
         occupied_all.append(occupied)
         counts.append([np.sum(x) for x in occupied])
 
-        # print(counts[:,0])
-        for i in range(len(points)):
-            print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+    counts, occupied_all = np.array(counts), np.array(occupied_all)
 
-        return np.array(counts), np.array(occupied_all)
+    # print(counts[:,0])
+    for i in range(len(points)):
+        print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+
+    return counts, occupied_all
 
 
 def draw_layout(width, height, mi, mx, points, occupied_all):
@@ -254,7 +256,6 @@ def draw_layout(width, height, mi, mx, points, occupied_all):
                 cv2.circle(layout, chair, radius=20, color=(45, 82, 160), thickness=-1)
 
         cv2.imwrite('layout.png', layout)
-
 
 
 if __name__ == "__main__":
@@ -281,6 +282,12 @@ if __name__ == "__main__":
     plane_coeffs = get_plane_coeffs(K, cam_poses)
 
     points = get_table_points(K, cam_poses, plane_coeffs)
+    temp = []
+    for table_cluster in points:
+        table_2d = plane2layout(table_cluster, plane_coeffs)
+        corners_2d = get_corners_2d(table_2d)
+        temp.append(corners_2d)
+    points = temp
 
     # from here
     chairPoints_all, chairPath_all = get_chair_point_path(points)
@@ -289,7 +296,7 @@ if __name__ == "__main__":
 
     # generate basic layout
     all_points = np.concatenate(points, axis=0)
-    mx, mi = get_bbox(all_points, plane_coeffs)
+    mx, mi = get_bbox(all_points)
     width = 800
     height = 851
     draw_layout(width, height, mi, mx, points, occupied_all)
