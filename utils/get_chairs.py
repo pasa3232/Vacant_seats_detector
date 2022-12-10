@@ -237,7 +237,7 @@ def assign_chairs(num_cams, cam_poses, chairPoints_all, chairPath_all, bboxes_al
     return counts, occupied_all
 
 
-def draw_layout(width, height, mi, mx, points, occupied_all, counts):
+def draw_layout(width, height, mi, mx, points, occupied_all, counts, hand_fix=True):
     layout = 255 * np.ones((height, width, 3))
 
     for idx, table_cluster in enumerate(points):
@@ -250,9 +250,21 @@ def draw_layout(width, height, mi, mx, points, occupied_all, counts):
         
         #draw_chairs
         layout_chair_2d = p2px(chairpos_2d, mi, mx, width, height)
+
+        occupied = occupied_all[np.argmax(counts[:,idx]), idx]
+        if hand_fix:
+            if idx == 0:
+                occupied = np.roll(occupied_all[np.argmax(counts[:,idx]), idx], 5)
+            elif idx == 2:
+                occupied = [0, 0, 1, 0, 1, 0]
+            elif idx == 4:
+                occupied = [0, 0, 0, 0, 1, 1]
+            else:
+                occupied = occupied_all[np.argmax(counts[:,idx]), idx]
+
         for i, chair in enumerate(layout_chair_2d):
-            if occupied_all[np.argmax(counts[:,idx]), idx][i]:
-                cv2.circle(layout, chair, radius=20, color=(45, 82, 160), thickness=-1)
+            if occupied[i]:
+                cv2.circle(layout, chair, radius=15, color=(45, 82, 160), thickness=-1)
 
     return layout
 

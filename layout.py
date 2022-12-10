@@ -295,7 +295,7 @@ if __name__ == "__main__":
     # generate basic layout
     all_points = np.concatenate(points, axis=0)
     layout.mx, layout.mi = get_bbox(all_points)
-    layout_im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts)
+    layout_im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts, hand_fix=True)
     cv2.imwrite("layout.png", layout_im)
 
     print(f'Done. ({time.time() - t0:.3f}s)')
