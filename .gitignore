@@ -130,3 +130,7 @@ dmypy.json
 
 # Mac directory
 .DS_Store
+
+# Big data
+data/simple1
+runs/detect/simple1

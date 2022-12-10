@@ -141,7 +141,7 @@ def kmeans(rgbs, numWords=10):
     flags = cv2.KMEANS_RANDOM_CENTERS
     start_time = time.time()
     _, _, vocab = cv2.kmeans(rgbs, numWords, None, criteria, attempts, flags)
-    print('kmeans time: {:6}s'.format(time.time() - start_time))
+    print(f'kmeans time: {time.time() - start_time:.6f}s')
 
     vocab_col = [[max(0, min(255, c)) for c in word] for word in vocab]
     return vocab, vocab_col

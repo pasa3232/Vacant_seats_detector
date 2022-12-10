@@ -53,7 +53,7 @@ class Layout:
                 poses[f'cam{i}'] = pose.reshape(4, 4)
         return poses
 
-    def cluster_tables(self, step=5):
+    def cluster_tables(self, step=10):
         rgbs = []
         for id in range(self.num_cams):
             im = self.img[id]
@@ -273,7 +273,8 @@ def find_intersection(objects_dict, groups, option=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--num-cams', type=int, default=4, help='number of cams')
-    parser.add_argument('--source', type=str, default='./runs/detect/simple', help='source')
+    parser.add_argument('--source', type=str, default='./data/simple', help='data source')
+    parser.add_argument('--yolo', type=str, default='./runs/detect/simple', help='yolo source')
     parser.add_argument('--layout-data', type=str, default='./data/layout', help='layout data directory path')
     parser.add_argument('--layout-detect', type=str, default='./runs/detect/layout', help='layout yolo output directory path')
     opt = parser.parse_args()
@@ -294,23 +295,38 @@ if __name__ == "__main__":
     # generate basic layout
     all_points = np.concatenate(points, axis=0)
     layout.mx, layout.mi = get_bbox(all_points)
-    im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts)
-    cv2.imwrite("layout.png", im)
+    layout_im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts)
+    cv2.imwrite("layout.png", layout_im)
 
     print(f'Done. ({time.time() - t0:.3f}s)')
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('simple.mp4', fourcc, 2.0, (layout.width, layout.height))
+    out = cv2.VideoWriter('simple.mp4', fourcc, 5.0, (1600, 1000))
+
+    font = cv2.FONT_HERSHEY_PLAIN
+    background = np.ones((1000, 1600, 3)) * 32
+    ori = [(0, 520), (0, 1060), (500, 520), (500, 1060)]
+    for id in range(layout.num_cams):
+        ori_x, ori_y = ori[id]
+        background = cv2.putText(background, f'CAM{id}', (ori_y, ori_x + 18), font, 1, (255, 255, 255))
 
     for i in tqdm(range(31)):
-        person_output = layout.get_objectes([0], "{:05d}.txt".format(i), source=Path(opt.source))[0]
+        person_output = layout.get_objectes([0], "{:05d}.txt".format(i), source=Path(opt.yolo))[0]
         people, people_groups = layout.find_overlap(person_output)
         people_intersection = find_intersection(people, people_groups)
 
-        im_clone = im.copy()
+        im = background.copy()
+        screen = layout_im.copy()
         for people in people_intersection:
             x, y = people.exterior.xy
             x, y = int(sum(x) / len(x)), int(sum(y) / len(y))
-            cv2.circle(im_clone, (x, y), 30, (150, 100, 50), -1)
-        out.write(im_clone)
+            cv2.circle(screen, (x, y), 30, (150, 100, 50), -1)
+        screen = cv2.resize(screen, dsize=(500, 500))
+        im[250:750,10:510] = screen
+        for id in range(layout.num_cams):
+            ori_x, ori_y = ori[id]
+            cam_im = cv2.resize(cv2.imread(str(Path(opt.source) / f'cam{id}' / f'{i:05d}.jpg')), dsize=(540, 480))
+            background[ori_x+20:ori_x+500, ori_y:ori_y+540] = cam_im
+
+        out.write(im.astype(np.uint8))
     out.release()

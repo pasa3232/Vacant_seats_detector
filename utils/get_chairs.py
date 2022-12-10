@@ -224,15 +224,15 @@ def assign_chairs(num_cams, cam_poses, chairPoints_all, chairPath_all, bboxes_al
                 else:
                     occupied[closestTable][closestTarget] = 1
                     break
-        print(occupied, np.sum(np.array(occupied)), sep = " ")
+        # print(occupied, np.sum(np.array(occupied)), sep = " ")
         occupied_all.append(occupied)
         counts.append([np.sum(x) for x in occupied])
 
     counts, occupied_all = np.array(counts), np.array(occupied_all)
 
     # print(counts[:,0])
-    for i in range(len(occupied_all[0])):
-        print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+    # for i in range(len(occupied_all[0])):
+    #     print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
 
     return counts, occupied_all
 
