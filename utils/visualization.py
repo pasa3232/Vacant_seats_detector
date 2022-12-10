@@ -5,9 +5,9 @@ import open3d as o3d
 import json
 
 from sklearn.cluster import KMeans
-from common import *
-from camera_models import *
-from get_chairs import *
+from utils.common import *
+from utils.camera_models import *
+from utils.get_chairs import *
 
 num_cams = 4
 

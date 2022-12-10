@@ -5,8 +5,7 @@ import json
 
 from shapely.geometry import Polygon as Poly
 from shapely.geometry import Point
-from visualization import *
-from common import *
+from utils.common import *
 
 
 def get_corners_3d(table_cluster):
@@ -85,7 +84,7 @@ def get_area_points(points, m):
 #   bboxes  : an array of [center, bbox] corresponding to a chair
 #   center  : [horizontal, vertical] pixel values
 #   bbox    : [[horizontal, vertical] of the 4 corners of the bounding box]
-def yoloToBoxesChairs(id):
+def yoloToBoxesChairs(id, num_cams):
 
     h, w = 1456, 1928
     yolo_outputs = {} # key: cami, value: yolo_output
@@ -117,7 +116,7 @@ def yoloToBoxesChairs(id):
     return bboxes
 
 
-def get_chair_point_path(points):
+def get_chair_point_path(points, plane_coeffs, K, cam_poses):
 
     chairPoints_all = []
     chairPath_all = []
@@ -185,7 +184,7 @@ def get_chair_point_path(points):
     return chairPoints_all, chairPath_all
 
 
-def assign_chairs(cam_poses, chairPoints_all, chairPath_all, bboxes_all):
+def assign_chairs(num_cams, cam_poses, chairPoints_all, chairPath_all, bboxes_all, K, plane_coeffs):
     counts = []
     occupied_all = []
     for idx in range(num_cams):
@@ -232,13 +231,13 @@ def assign_chairs(cam_poses, chairPoints_all, chairPath_all, bboxes_all):
     counts, occupied_all = np.array(counts), np.array(occupied_all)
 
     # print(counts[:,0])
-    for i in range(len(points)):
+    for i in range(len(occupied_all[0])):
         print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
 
     return counts, occupied_all
 
 
-def draw_layout(width, height, mi, mx, points, occupied_all):
+def draw_layout(width, height, mi, mx, points, occupied_all, counts):
     layout = 255 * np.ones((height, width, 3))
 
     for idx, table_cluster in enumerate(points):
@@ -255,7 +254,7 @@ def draw_layout(width, height, mi, mx, points, occupied_all):
             if occupied_all[np.argmax(counts[:,idx]), idx][i]:
                 cv2.circle(layout, chair, radius=20, color=(45, 82, 160), thickness=-1)
 
-        cv2.imwrite('layout.png', layout)
+    return layout
 
 
 if __name__ == "__main__":

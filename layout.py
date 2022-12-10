@@ -10,7 +10,7 @@ import random
 from tqdm import tqdm
 from glob import glob
 
-# from utils.get_chairs import *
+from utils.get_chairs import *
 from utils.common import *
 from pathlib import Path
 from itertools import permutations
@@ -159,7 +159,7 @@ class Layout:
         tables, groups = self.table_overlap()
 
         check = [np.zeros([self.h, self.w]) for _ in range(self.num_cams)]
-        points_all = [[] for _ in groups]
+        points_all = []
         for group in groups:
             inter = None
             for id, tid in group:
@@ -178,10 +178,10 @@ class Layout:
             rgbs = []
             rev = []
             for x, y in samples:
-                t1 = px2p(np.array([x, y]), self.mi_px, self.mx_px, width, height).reshape(1, 2)
-                t2 = layout2plane(t1, plane_coeffs)
-                for id in range(num_cams):
-                    r_, c_ = reprojection(t2, K, cam_poses[f'cam{id}'])[0].astype(int)[::-1]
+                t1 = px2p(np.array([x, y]), self.mi_px, self.mx_px, self.width, self.height).reshape(1, 2)
+                t2 = layout2plane(t1, self.plane_coeffs)
+                for id in range(self.num_cams):
+                    r_, c_ = reprojection(t2, self.K, self.cam_poses[f'cam{id}'])[0].astype(int)[::-1]
                     rgbs.append(self.img[id][r_][c_])
                     rev.append((id, r_, c_))
             rgbs = np.array(rgbs, dtype=np.float32)
@@ -208,10 +208,13 @@ class Layout:
                     tmp.append([y, x])
                     for x_, y_ in zip(dx, dy):
                         u, v = x + x_, y + y_
-                        if self.h > u > 0 and self.w > v > 0 and check[id][u][v] == 0 and bf.knnMatch(np.array([img[id][u][v].astype(np.float32)]), vocab, k=1)[0][0].trainIdx == table_class:
+                        if self.h > u > 0 and self.w > v > 0 and check[id][u][v] == 0 and bf.knnMatch(np.array([self.img[id][u][v].astype(np.float32)]), self.vocab, k=1)[0][0].trainIdx == table_class:
                             queue.append((u, v))
                             check[id][u][v] = 1
                 pixels += list(pixel2plane(np.array(tmp), self.K, self.cam_poses[f'cam{id}'][:3,:], self.plane_coeffs))
+    
+            points_all.append(plane2layout(np.array(pixels), self.plane_coeffs))
+        return points_all
 
 
     def find_overlap(self, output_dict):
@@ -274,18 +277,30 @@ if __name__ == "__main__":
     parser.add_argument('--layout-data', type=str, default='./data/layout', help='layout data directory path')
     parser.add_argument('--layout-detect', type=str, default='./runs/detect/layout', help='layout yolo output directory path')
     opt = parser.parse_args()
-    print(opt)
 
     ## Layout
     print('Layout formulating ...')
     t0 = time.time()
     layout = Layout(data_path=opt.layout_data, detect_path=opt.layout_detect, num_cams=opt.num_cams)
-    # layout.get_table_layout()
+    t1 = time.time()
+    points = layout.get_table_layout()
+    points = [get_corners_2d(p) for p in points]
+    print(f'Getting table layout: {time.time() - t1:.6f}s')
+
+    chairPoints_all, chairPath_all = get_chair_point_path(points, layout.plane_coeffs, layout.K, layout.cam_poses)
+    bboxes_all = [yoloToBoxesChairs(id, layout.num_cams) for id in range(layout.num_cams)]
+    counts, occupied_all = assign_chairs(layout.num_cams, layout.cam_poses, chairPoints_all, chairPath_all, bboxes_all, layout.K, layout.plane_coeffs)
+
+    # generate basic layout
+    all_points = np.concatenate(points, axis=0)
+    layout.mx, layout.mi = get_bbox(all_points)
+    im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts)
+    cv2.imwrite("layout.png", im)
+
     print(f'Done. ({time.time() - t0:.3f}s)')
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter('simple.mp4', fourcc, 2.0, (layout.width, layout.height))
-    im = cv2.cvtColor(cv2.imread("layout.png"), cv2.COLOR_BGR2RGB)
 
     for i in tqdm(range(31)):
         person_output = layout.get_objectes([0], "{:05d}.txt".format(i), source=Path(opt.source))[0]
@@ -298,5 +313,4 @@ if __name__ == "__main__":
             x, y = int(sum(x) / len(x)), int(sum(y) / len(y))
             cv2.circle(im_clone, (x, y), 30, (150, 100, 50), -1)
         out.write(im_clone)
-        # cv2.imwrite(f"runs/{i}.jpg", im_clone)
     out.release()
