@@ -117,45 +117,19 @@ def yoloToBoxesChairs(id):
     return bboxes
 
 
-if __name__ == "__main__":
-    K = np.array([
-        [975.813843, 0, 960.973816],
-        [0, 975.475220, 729.893921],
-        [0, 0, 1]
-    ])
-
-
-    ### fetch camera poses
-    num_cams = 4
-    cam_poses = {} # key: cami, value: pose
-    for i in range(num_cams):
-        with open(f'camera_poses/{i:05d}.txt', 'r') as f:
-            lines = f.readlines()
-            pose = []
-            for line in lines:
-                data = list(map(float, line.split(" ")))
-                pose.append(data)
-            pose = np.array(pose)
-            cam_poses[f'cam{i}'] = pose.reshape(4, 4)
-
-    plane_coeffs = get_plane_coeffs(K, cam_poses)
-
-    points = get_table_points(K, cam_poses, plane_coeffs)
+def get_chair_point_path(points):
 
     chairPoints_all = []
     chairPath_all = []
 
     # get corner points for each table in 3D
-    for i in range(num_cams):
+    for i in range(4):
         img = cv2.imread(f'data/layout/cam{i}/00000.jpg')
         chairPoints = []
         chairPaths = []
         for idx, table_cluster in enumerate(points):
             # Reduce dimension
-            table_2d = plane2layout(table_cluster, plane_coeffs)
-
-            # Getting corners in layout --> 3d points
-            corners_2d = get_corners_2d(table_2d)
+            corners_2d = table_cluster
             corners_3d = layout2plane(corners_2d, plane_coeffs)
 
             # Getting corners of areas
@@ -208,10 +182,11 @@ if __name__ == "__main__":
         chairPoints_all.append(chairPoints)
         chairPath_all.append(chairPaths)
 
-    bboxes_all = [yoloToBoxesChairs(id) for id in range(num_cams)]
+    return chairPoints_all, chairPath_all
 
+
+def assign_chairs(cam_poses, chairPoints_all, chairPath_all, bboxes_all):
     counts = []
-
     occupied_all = []
     for idx in range(num_cams):
         pose = cam_poses[f'cam{idx}']
@@ -254,24 +229,18 @@ if __name__ == "__main__":
         occupied_all.append(occupied)
         counts.append([np.sum(x) for x in occupied])
 
-    counts = np.array(counts)
-    occupied_all = np.array(occupied_all)
-    # print(counts[:,0])
-    for i in range(table_count):
-        print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
+        # print(counts[:,0])
+        for i in range(len(points)):
+            print("Table", i, ":", np.max(counts[:,i]), occupied_all[np.argmax(counts[:,i]), i], "Chairs", sep=" ")
 
-    
-    points = get_table_points(K, cam_poses, plane_coeffs)
-    all_points = np.concatenate(points, axis=0)
-    mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
+        return np.array(counts), np.array(occupied_all)
 
-    width = 800
-    height = 851
+
+def draw_layout(width, height, mi, mx, points, occupied_all):
     layout = 255 * np.ones((height, width, 3))
 
     for idx, table_cluster in enumerate(points):
-        table_2d = plane2layout(table_cluster, plane_coeffs)
-        corners_2d = get_corners_2d(table_2d)
+        corners_2d = table_cluster
         chairpos_2d = get_area_points(corners_2d, m=0.25)
 
         #draw tables
@@ -285,6 +254,48 @@ if __name__ == "__main__":
                 cv2.circle(layout, chair, radius=20, color=(45, 82, 160), thickness=-1)
 
         cv2.imwrite('layout.png', layout)
+
+
+
+if __name__ == "__main__":
+    K = np.array([
+        [975.813843, 0, 960.973816],
+        [0, 975.475220, 729.893921],
+        [0, 0, 1]
+    ])
+
+
+    ### fetch camera poses
+    num_cams = 4
+    cam_poses = {} # key: cami, value: pose
+    for i in range(num_cams):
+        with open(f'camera_poses/{i:05d}.txt', 'r') as f:
+            lines = f.readlines()
+            pose = []
+            for line in lines:
+                data = list(map(float, line.split(" ")))
+                pose.append(data)
+            pose = np.array(pose)
+            cam_poses[f'cam{i}'] = pose.reshape(4, 4)
+
+    plane_coeffs = get_plane_coeffs(K, cam_poses)
+
+    points = get_table_points(K, cam_poses, plane_coeffs)
+
+    # from here
+    chairPoints_all, chairPath_all = get_chair_point_path(points)
+    bboxes_all = [yoloToBoxesChairs(id) for id in range(num_cams)]
+    counts, occupied_all = assign_chairs(cam_poses, chairPoints_all, chairPath_all, bboxes_all)
+
+    # generate basic layout
+    all_points = np.concatenate(points, axis=0)
+    mx, mi = get_bbox(all_points, plane_coeffs)
+    width = 800
+    height = 851
+    draw_layout(width, height, mi, mx, points, occupied_all)
+
+    
+   
     
 
     
