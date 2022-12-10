@@ -133,4 +133,6 @@ dmypy.json
 
 # Big data
 data/simple1
+data/simple2
 runs/detect/simple1
+runs/detect/simple2

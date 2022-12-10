@@ -12,6 +12,7 @@ from glob import glob
 
 from utils.get_chairs import *
 from utils.common import *
+from utils.geometry import pnt2line
 from pathlib import Path
 from itertools import permutations
 from shapely.geometry import Polygon, MultiPoint, Point
@@ -269,6 +270,30 @@ def find_intersection(objects_dict, groups, option=False):
         group_intersection.append(intersection)
     return group_intersection
 
+def nearest_table(person, tables_2d):
+    nearest_table_dist = table_idx = None
+    person = np.concatenate([person, [0]])
+    layout_table_3d = np.zeros((4, 3))
+    for idx, layout_table_2d in enumerate(tables_2d):
+        layout_table_3d[:,:-1] = layout_table_2d
+
+        dist = None
+        for i in range(4):
+            j = (i + 1) % 4
+            tmp = pnt2line(person, layout_table_3d[i], layout_table_3d[j])
+            if dist is None:
+                dist = tmp
+            else:
+                dist = min(dist, tmp)
+        
+        if idx == 0:
+            nearest_table_dist, table_idx = dist, idx
+            continue
+        if nearest_table_dist > dist:
+            nearest_table_dist, table_idx = dist, idx
+        
+    return table_idx
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -277,6 +302,7 @@ if __name__ == "__main__":
     parser.add_argument('--yolo', type=str, default='./runs/detect/simple', help='yolo source')
     parser.add_argument('--layout-data', type=str, default='./data/layout', help='layout data directory path')
     parser.add_argument('--layout-detect', type=str, default='./runs/detect/layout', help='layout yolo output directory path')
+    parser.add_argument('--frames', type=int, default=20, help='Number of frames to update')
     opt = parser.parse_args()
 
     ## Layout
@@ -284,24 +310,28 @@ if __name__ == "__main__":
     t0 = time.time()
     layout = Layout(data_path=opt.layout_data, detect_path=opt.layout_detect, num_cams=opt.num_cams)
     t1 = time.time()
-    points = layout.get_table_layout()
-    points = [get_corners_2d(p) for p in points]
+    tables = layout.get_table_layout()
+    tables = [get_corners_2d(p) for p in tables]
+    tables_2d = [p2px(corners_2d, layout.mi_px, layout.mx_px, layout.width, layout.height) for corners_2d in tables]
     print(f'Getting table layout: {time.time() - t1:.6f}s')
 
-    chairPoints_all, chairPath_all = get_chair_point_path(points, layout.plane_coeffs, layout.K, layout.cam_poses)
+    chairPoints_all, chairPath_all = get_chair_point_path(tables, layout.plane_coeffs, layout.K, layout.cam_poses)
     bboxes_all = [yoloToBoxesChairs(id, layout.num_cams) for id in range(layout.num_cams)]
     counts, occupied_all = assign_chairs(layout.num_cams, layout.cam_poses, chairPoints_all, chairPath_all, bboxes_all, layout.K, layout.plane_coeffs)
 
     # generate basic layout
-    all_points = np.concatenate(points, axis=0)
+    all_points = np.concatenate(tables, axis=0)
     layout.mx, layout.mi = get_bbox(all_points)
-    layout_im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, points, occupied_all, counts, hand_fix=True)
+    layout_im = draw_layout(layout.width, layout.height, layout.mi, layout.mx, tables, occupied_all, counts, hand_fix=True)
     cv2.imwrite("layout.png", layout_im)
 
-    print(f'Done. ({time.time() - t0:.3f}s)')
+    print(f'Done. ({time.time() - t0:.3f}s)\n')
 
+    save_dir = Path(f"./runs/output/{Path(opt.source).name}")
+    save_dir.mkdir(parents=True, exist_ok=True)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('simple.mp4', fourcc, 5.0, (1600, 1000))
+    out1 = cv2.VideoWriter(str(save_dir / 'objects.mp4'), fourcc, 5.0, (1600, 1000))
+    out2 = cv2.VideoWriter(str(save_dir / f'output_{opt.frames}.mp4'), fourcc, 5.0, (1600, 1000))
 
     font = cv2.FONT_HERSHEY_PLAIN
     background = np.ones((1000, 1600, 3)) * 32
@@ -310,23 +340,47 @@ if __name__ == "__main__":
         ori_x, ori_y = ori[id]
         background = cv2.putText(background, f'CAM{id}', (ori_y, ori_x + 18), font, 1, (255, 255, 255))
 
-    for i in tqdm(range(31)):
+    screen2 = layout_im.copy()
+    occupied = np.zeros(len(tables))
+    num_frames = len(glob(str(Path(opt.source) / 'cam0' / '*.jpg')))
+    print(f"Number of frames: {num_frames}")
+    for i in tqdm(range(num_frames)):
         person_output = layout.get_objectes([0], "{:05d}.txt".format(i), source=Path(opt.yolo))[0]
         people, people_groups = layout.find_overlap(person_output)
         people_intersection = find_intersection(people, people_groups)
 
         im = background.copy()
-        screen = layout_im.copy()
+        screen1 = layout_im.copy()
         for people in people_intersection:
             x, y = people.exterior.xy
             x, y = int(sum(x) / len(x)), int(sum(y) / len(y))
-            cv2.circle(screen, (x, y), 30, (150, 100, 50), -1)
-        screen = cv2.resize(screen, dsize=(500, 500))
-        im[250:750,10:510] = screen
+            cv2.circle(screen1, (x, y), 30, (150, 100, 50), -1)
+
+            table_idx = nearest_table(np.array([x, y]), tables_2d)
+            occupied[table_idx] += 1
+        
+        if i % opt.frames == (opt.frames - 1):
+            screen2 = layout_im.copy()
+            for idx in range(len(tables)):
+                if opt.frames > 1 and occupied[idx] < (opt.frames // 2):
+                    continue
+                if opt.frames == 1 and occupied[idx] == 0:
+                    continue
+                cv2.rectangle(screen2, tables_2d[idx][0], tables_2d[idx][2], color=(41, 33, 82), thickness=-1)
+            occupied = np.zeros(len(tables))
+        
+        screen1 = cv2.resize(screen1, dsize=(500, 500))
+        screen2 = cv2.resize(screen2, dsize=(500, 500))
         for id in range(layout.num_cams):
             ori_x, ori_y = ori[id]
             cam_im = cv2.resize(cv2.imread(str(Path(opt.source) / f'cam{id}' / f'{i:05d}.jpg')), dsize=(540, 480))
             background[ori_x+20:ori_x+500, ori_y:ori_y+540] = cam_im
+        
+        im[250:750,10:510] = screen1
+        out1.write(im.astype(np.uint8))
 
-        out.write(im.astype(np.uint8))
-    out.release()
+        im[250:750,10:510] = screen2
+        out2.write(im.astype(np.uint8))
+    
+    out1.release()
+    out2.release()
