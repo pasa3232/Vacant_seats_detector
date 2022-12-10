@@ -330,8 +330,7 @@ if __name__ == "__main__":
     save_dir = Path(f"./runs/output/{Path(opt.source).name}")
     save_dir.mkdir(parents=True, exist_ok=True)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out1 = cv2.VideoWriter(str(save_dir / 'objects.mp4'), fourcc, 5.0, (1600, 1000))
-    out2 = cv2.VideoWriter(str(save_dir / f'output_{opt.frames}.mp4'), fourcc, 5.0, (1600, 1000))
+    out = cv2.VideoWriter(str(save_dir / f'output_{opt.frames}.mp4'), fourcc, 5.0, (1600, 1000))
 
     font = cv2.FONT_HERSHEY_PLAIN
     background = np.ones((1000, 1600, 3)) * 32
@@ -339,10 +338,13 @@ if __name__ == "__main__":
     for id in range(layout.num_cams):
         ori_x, ori_y = ori[id]
         background = cv2.putText(background, f'CAM{id}', (ori_y, ori_x + 18), font, 1, (255, 255, 255))
+    background[0:1000, 0:520] = np.full((*(1000, 520), 3), [51, 153, 255])
+    background = cv2.putText(background, f'Tracking objects result', (0, 18), font, 1, (0, 0, 0), 1)
+    background = cv2.putText(background, f'Table occupancy', (0, 518), font, 1, (0, 0, 0), 1)
 
     screen2 = layout_im.copy()
-    occupied = np.zeros(len(tables))
     num_frames = len(glob(str(Path(opt.source) / 'cam0' / '*.jpg')))
+    occupied = [[] for _ in tables]
     print(f"Number of frames: {num_frames}")
     for i in tqdm(range(num_frames)):
         person_output = layout.get_objectes([0], "{:05d}.txt".format(i), source=Path(opt.yolo))[0]
@@ -351,36 +353,39 @@ if __name__ == "__main__":
 
         im = background.copy()
         screen1 = layout_im.copy()
+        screen2 = layout_im.copy()
+        
+        check = [0 for _ in tables]
         for people in people_intersection:
             x, y = people.exterior.xy
             x, y = int(sum(x) / len(x)), int(sum(y) / len(y))
             cv2.circle(screen1, (x, y), 30, (150, 100, 50), -1)
 
             table_idx = nearest_table(np.array([x, y]), tables_2d)
-            occupied[table_idx] += 1
+            check[table_idx] = 1
         
-        if i % opt.frames == (opt.frames - 1):
-            screen2 = layout_im.copy()
-            for idx in range(len(tables)):
-                if opt.frames > 1 and occupied[idx] < (opt.frames // 2):
-                    continue
-                if opt.frames == 1 and occupied[idx] == 0:
-                    continue
-                cv2.rectangle(screen2, tables_2d[idx][0], tables_2d[idx][2], color=(41, 33, 82), thickness=-1)
-            occupied = np.zeros(len(tables))
+        for idx in range(len(tables)):
+            occupied[idx].append(check[idx])
+            num_f = min(opt.frames, i+1)
+            occup_cnt = sum(occupied[idx])
+            if num_f == opt.frames:
+                occupied[idx].pop(0)
+            
+            if num_f > 1 and occup_cnt < (num_f // 2):
+                continue
+            if num_f == 1 and occup_cnt == 0:
+                continue
+            cv2.rectangle(screen2, tables_2d[idx][0], tables_2d[idx][2], color=(41, 33, 82), thickness=-1)
         
-        screen1 = cv2.resize(screen1, dsize=(500, 500))
-        screen2 = cv2.resize(screen2, dsize=(500, 500))
+        screen1 = cv2.resize(screen1, dsize=(520, 480))
+        screen2 = cv2.resize(screen2, dsize=(520, 480))
         for id in range(layout.num_cams):
             ori_x, ori_y = ori[id]
             cam_im = cv2.resize(cv2.imread(str(Path(opt.source) / f'cam{id}' / f'{i:05d}.jpg')), dsize=(540, 480))
             background[ori_x+20:ori_x+500, ori_y:ori_y+540] = cam_im
         
-        im[250:750,10:510] = screen1
-        out1.write(im.astype(np.uint8))
-
-        im[250:750,10:510] = screen2
-        out2.write(im.astype(np.uint8))
+        im[20:500,0:520] = screen1
+        im[520:1000,0:520] = screen2
+        out.write(im.astype(np.uint8))
     
-    out1.release()
-    out2.release()
+    out.release()
