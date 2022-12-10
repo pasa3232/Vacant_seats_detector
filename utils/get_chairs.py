@@ -265,8 +265,8 @@ if __name__ == "__main__":
     all_points = np.concatenate(points, axis=0)
     mx, mi = get_bbox(plane2layout(all_points, plane_coeffs))
 
-    width = 851
-    height = 800
+    width = 800
+    height = 851
     layout = 255 * np.ones((height, width, 3))
 
     for idx, table_cluster in enumerate(points):
