@@ -1,4 +1,8 @@
 import numpy as np
+import cv2
+import time
+
+from shapely.geometry import Polygon, MultiPoint, Point
 
 ### triangulation
 # poses: list of (4, 4)
@@ -129,6 +133,48 @@ def px2p(p, mi_px, mx_px, width, height):
 def get_bbox(points):
     return np.max(points, axis=0), np.min(points, axis=0)
 
+
+## clustering
+def kmeans(rgbs, numWords=10):
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 500, 1.0)
+    attempts = 10
+    flags = cv2.KMEANS_RANDOM_CENTERS
+    start_time = time.time()
+    _, _, vocab = cv2.kmeans(rgbs, numWords, None, criteria, attempts, flags)
+    print('kmeans time: {:6}s'.format(time.time() - start_time))
+
+    vocab_col = [[max(0, min(255, c)) for c in word] for word in vocab]
+    return vocab, vocab_col
+
+
+## Matcing
+def matchByOverlap(after_bboxes, before_bboxes_transformed, threshold=0.1):
+    overlaps = []
+    for i, after_bbox in enumerate(after_bboxes):
+        after_bbox_polygon = Polygon(after_bbox)
+        for j, before_bbox_transformed in enumerate(before_bboxes_transformed):
+            before_bbox_transformed_polygon = Polygon(before_bbox_transformed)
+            if(after_bbox_polygon.intersects(before_bbox_transformed_polygon)):
+                overlap = after_bbox_polygon.intersection(before_bbox_transformed_polygon).area
+                total = after_bbox_polygon.area + before_bbox_transformed_polygon.area - overlap
+                percentage = overlap/total
+                # percentage = overlap/after_bbox_polygon.area
+                overlaps.append([i, j, percentage])
+    overlaps.sort(key = lambda x : x[-1], reverse=True)
+    
+    after_indices = set(range(len(after_bboxes)))
+    before_indices = set(range(len(before_bboxes_transformed)))
+
+    selected = []
+    for i, j, iou in overlaps:
+        if i in after_indices and j in before_indices and iou > threshold:
+            # i : index in bboxes (cam(i+1))
+            # j : index in transformed_bboxes (cam(i) -> cam(i+1))
+            selected.append([i, j])
+            after_indices.remove(i)
+            before_indices.remove(j)
+
+    return selected
 
 
 ### Homography
