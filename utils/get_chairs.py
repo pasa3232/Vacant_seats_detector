@@ -257,6 +257,8 @@ def draw_layout(width, height, mi, mx, points, occupied_all, counts, hand_fix=Tr
                 occupied = np.roll(occupied_all[np.argmax(counts[:,idx]), idx], 5)
             elif idx == 2:
                 occupied = [0, 0, 1, 0, 1, 0]
+            elif idx == 3:
+                occupied = [1, 1, 1, 0, 1, 1]
             elif idx == 4:
                 occupied = [0, 0, 0, 0, 1, 1]
             else:
